@@ -17,3 +17,7 @@ build/
 dist/
 *.sqlite
 *.json
+*.sqlite-journal
+download/
+avance/
+*.log
