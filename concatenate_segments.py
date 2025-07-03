@@ -1,8 +1,8 @@
 from pathlib import Path
 
-FOLDER = Path(r"avance\segmentos")
+FOLDER = Path(r"D:\github Leo\caracoltv-dl\download")
 
-FILENAME = "avance 1 capítulo 2"
+FILENAME = "Captilo 2"
 
 with open(f"{FILENAME}.ts", "wb") as f:
     for path in FOLDER.iterdir():
