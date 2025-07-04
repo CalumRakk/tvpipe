@@ -1,6 +1,6 @@
 from pathlib import Path
 
-FOLDER = Path(r"D:\github Leo\caracoltv-dl\download")
+FOLDER = Path(r"D:\github Leo\caracoltv-dl\download\capitlo 3 avance")
 
 FILENAME = "Captilo 2"
 

@@ -25,7 +25,7 @@ def download_segment(url, folder: Path) -> Optional[tuple[str, bool]]:
         return url, False
 
 
-VIDEO_ID = "6866aa52c3625256db1d7648"
+VIDEO_ID = "6867fd752e264a0e3fb30e13"
 FILENAME = f"{VIDEO_ID}.ts"
 FOLDER = Path("download") / VIDEO_ID
 
