@@ -56,7 +56,7 @@ class CaracolLiveStream:
     def fetch_best_playlist(self):
         logger = logging.getLogger(__name__)
         master = self.fetch_master()
-        url = cast(str, master.playlists[-1].uri)
+        url = cast(str, master.playlists[0].uri)
 
         logger.info("URL PLAYLIST: " + url)
 
