@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional, cast
 
+import requests
 import yt_dlp
 
 
@@ -25,7 +26,7 @@ def get_episode_number(string) -> str:
     pattern = r"[Cc]ap[ií]tulo\s*([0-9]+)"
     match = re.search(pattern, string)
     if match:
-        return match.group(1)
+        return match.group(1).zfill(2)
     raise Exception("No se encontró el número de episodio.")
 
 
@@ -74,13 +75,6 @@ def get_best_audio_format(url) -> str:
     candidates.sort(key=lambda x: x.get("filesize") or 0)
     best = candidates[0]
     return best["format_id"]
-
-
-def build_name_stem(serie_name, url, quality) -> str:
-    info = get_metadata(url)
-    number = get_episode_number(info["title"]).zfill(2)
-    serie_name_normalized = serie_name.replace(" ", ".").lower()
-    return f"{serie_name_normalized}.capitulo.{number}.yt.{quality}p"
 
 
 def download_video(config: dict) -> list[tuple[int, str]]:
@@ -152,23 +146,39 @@ def cleanup(paths: list[str]) -> None:
 
 
 if __name__ == "__main__":
-
     config = {
         "SERIE_NAME": "desafio siglo xxi 2025",
-        "URL": "https://www.youtube.com/watch?v=Z-rketUJeRg",
+        "URL": "https://www.youtube.com/watch?v=IeHwWQlma3c",
         "QUALITIES": [720, 480],
         "OUTPUT_FOLDER": Path("output"),
     }
+    filename_template = "{serie_name_normalized}.capitulo.{number}.yt.{quality}p{ext}"  # ext debe tener el punto
 
     video_paths = download_video(config)
     audio_path = download_audio(config)
 
+    video_title = get_metadata(config["URL"])["title"]
+    number = get_episode_number(video_title)
+    serie_name_normalized = config["SERIE_NAME"].replace(" ", ".").lower()
     for quality, video_path in video_paths:
-        serie_name = config["SERIE_NAME"]
-        url = config["URL"]
-        stem = build_name_stem(serie_name, url, quality)
-        output = str(config["OUTPUT_FOLDER"] / f"{stem}.mp4")
+        ext = Path(video_path).suffix
+        filename = filename_template.format(
+            serie_name_normalized=serie_name_normalized,
+            number=number,
+            quality=quality,
+            ext=ext,
+        )
+        output = str(config["OUTPUT_FOLDER"] / filename)
         merge_with_ffmpeg(video_path, audio_path, output)
+
+    info = get_metadata(config["URL"])
+    thumbnail = info.get("thumbnail", "")
+    filename = f"{serie_name_normalized}.capitulo.{number}.yt.thumbnail.jpg"
+    output = config["OUTPUT_FOLDER"] / filename
+    if not output.exists():
+        response = requests.get(thumbnail)
+        with open(output, "wb") as f:
+            f.write(response.content)
 
     # cleanup([video_path, audio_path])
     print("✅ Proceso completado.")
