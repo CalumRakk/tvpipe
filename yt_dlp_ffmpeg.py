@@ -76,49 +76,40 @@ def get_best_audio_format(url) -> str:
     return best["format_id"]
 
 
-def get_output_name(config: dict) -> str:
-    url = config["URL"]
-    quality = config["QUALITY"]
-    serie_name = config["SERIE_NAME"]
-    output_folder = (
-        Path(config["OUTPUT_FOLDER"])
-        if isinstance(config["OUTPUT_FOLDER"], str)
-        else config["OUTPUT_FOLDER"]
-    )
-
+def build_name_stem(serie_name, url, quality) -> str:
     info = get_metadata(url)
     number = get_episode_number(info["title"]).zfill(2)
     serie_name_normalized = serie_name.replace(" ", ".").lower()
-    name = f"{serie_name_normalized}.capitulo.{number}.yt.{quality}p"
-
-    output = output_folder / "TEMP" / f"{name}.%(ext)s"
-    return str(output)
+    return f"{serie_name_normalized}.capitulo.{number}.yt.{quality}p"
 
 
-def download_video(config: dict) -> list[str]:
+def download_video(config: dict) -> list[tuple[int, str]]:
     url = config["URL"]
-    qualities = config["QUALITIES"]
+    qualities: list[int] = config["QUALITIES"]
 
     paths = []
     for quality in qualities:
         best_video_id = get_best_video_format(url, quality)
-        output = get_output_name(config)
+        output_folder = config["OUTPUT_FOLDER"] / "TEMP"
+        output = f"{output_folder}/channel_id=%(channel_id)s&video_id=%(id)s&format_id=%(format_id)s&resolution=%(resolution)s.%(ext)s"
 
         ydl_opts_video = {
             "format": best_video_id,
-            "outtmpl": str(output),
+            "outtmpl": output,
             "noplaylist": True,
         }
         with yt_dlp.YoutubeDL(ydl_opts_video) as ydl:
             info = cast(dict, ydl.extract_info(url, download=True))
-            path = info["requested_downloads"][0]["filepath"]
-            paths.append(path)
+            path: str = info["requested_downloads"][0]["filepath"]
+            paths.append((quality, path))
+
     return paths
 
 
-def download_audio(url) -> str:
+def download_audio(config) -> str:
     url = config["URL"]
-    output = get_output_name(config)
+    output_folder = config["OUTPUT_FOLDER"] / "TEMP"
+    output = f"{output_folder}/channel_id=%(channel_id)s&video_id=%(id)s&format_id=%(format_id)s.%(ext)s"
     ydl_opts_audio = {"format": "bestaudio", "outtmpl": output, "continue_dl": True}
 
     with yt_dlp.YoutubeDL(ydl_opts_audio) as ydl:
@@ -129,6 +120,10 @@ def download_audio(url) -> str:
 
 def merge_with_ffmpeg(video_path: str, audio_path: str, output: str) -> None:
     # TODO: Usar doble comillas para encerrar las ruta, solo funciona en windows
+    if os.path.exists(output):
+        print(f"El archivo {output} ya existe. Omitiendo fusión.")
+        return
+
     print("Uniendo video y audio con FFmpeg...")
     cmd = [
         "ffmpeg",
@@ -168,8 +163,11 @@ if __name__ == "__main__":
     video_paths = download_video(config)
     audio_path = download_audio(config)
 
-    for video_path in video_paths:
-        output = str(config["OUTPUT_FOLDER"] / Path(video_path).name)
+    for quality, video_path in video_paths:
+        serie_name = config["SERIE_NAME"]
+        url = config["URL"]
+        stem = build_name_stem(serie_name, url, quality)
+        output = str(config["OUTPUT_FOLDER"] / f"{stem}.mp4")
         merge_with_ffmpeg(video_path, audio_path, output)
 
     # cleanup([video_path, audio_path])
