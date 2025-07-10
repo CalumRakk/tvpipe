@@ -1,11 +1,41 @@
 import os
 import re
 import subprocess
+from datetime import datetime, time, timedelta
 from pathlib import Path
+from time import sleep
 from typing import Optional, cast
 
 import requests
 import yt_dlp
+
+
+def get_episode_of_the_day() -> Optional[str]:
+    """Devuelve la url del capitulo del dia actual"""
+    url = "https://www.youtube.com/@desafiocaracol/videos"
+    ydl_opts = {
+        "extract_flat": True,
+        "playlistend": 5,
+        "quiet": True,  # No imprime mensajes informativos
+        "no_warnings": True,  # No muestra advertencias
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = cast(dict, ydl.extract_info(url, download=False))
+        for entry in info["entries"]:
+            try:
+                title = entry["title"]
+                url = entry["url"]
+                number = get_episode_number(
+                    title
+                )  # Se usa para comprobar que el titulo contenga la palabra "capitulo", en caso contrario dará error y saltara al siguiente video
+                info = get_metadata(url)
+                timestamp = datetime.fromtimestamp(info["timestamp"])
+                is_today = timestamp.date() == datetime.now().date()
+                if not is_today:
+                    continue
+                return url
+            except Exception as e:
+                continue
 
 
 def get_episode_number(string) -> str:
@@ -145,40 +175,66 @@ def cleanup(paths: list[str]) -> None:
             os.remove(path)
 
 
+def sleep_progress(seconds):
+    minutes = int(timedelta(seconds=seconds).total_seconds() // 60)
+
+    print(f"Esperando {minutes} minutos antes de continuar...")
+    count = 0
+    for i in range(int(seconds), 0, -1):
+        sleep(1)
+        count += 1
+        if count % 60 == 0:
+            minutes -= 1
+            print(f"Esperando {minutes} minutos antes de continuar...")
+
+
 if __name__ == "__main__":
-    config = {
-        "SERIE_NAME": "desafio siglo xxi 2025",
-        "URL": "https://www.youtube.com/watch?v=IeHwWQlma3c",
-        "QUALITIES": [720, 480],
-        "OUTPUT_FOLDER": Path("output"),
-    }
-    filename_template = "{serie_name_normalized}.capitulo.{number}.yt.{quality}p{ext}"  # ext debe tener el punto
+    nine_pm_today = datetime.combine(datetime.now().date(), time(21, 0))
+    while True:
+        if datetime.now() < nine_pm_today:
+            difference = nine_pm_today - datetime.now()
+            seconds = difference.total_seconds()
+            sleep_progress(seconds)
+            continue
 
-    video_paths = download_video(config)
-    audio_path = download_audio(config)
+        url = get_episode_of_the_day()
+        if url is None:
+            sleep(60)
+            continue
 
-    video_title = get_metadata(config["URL"])["title"]
-    number = get_episode_number(video_title)
-    serie_name_normalized = config["SERIE_NAME"].replace(" ", ".").lower()
-    for quality, video_path in video_paths:
-        ext = Path(video_path).suffix
-        filename = filename_template.format(
-            serie_name_normalized=serie_name_normalized,
-            number=number,
-            quality=quality,
-            ext=ext,
-        )
-        output = str(config["OUTPUT_FOLDER"] / filename)
-        merge_with_ffmpeg(video_path, audio_path, output)
+        config = {
+            "SERIE_NAME": "desafio siglo xxi 2025",
+            "URL": url,
+            "QUALITIES": [720, 360],
+            "OUTPUT_FOLDER": Path("output"),
+        }
+        filename_template = "{serie_name_normalized}.capitulo.{number}.yt.{quality}p{ext}"  # ext debe tener el punto
 
-    info = get_metadata(config["URL"])
-    thumbnail = info.get("thumbnail", "")
-    filename = f"{serie_name_normalized}.capitulo.{number}.yt.thumbnail.jpg"
-    output = config["OUTPUT_FOLDER"] / filename
-    if not output.exists():
-        response = requests.get(thumbnail)
-        with open(output, "wb") as f:
-            f.write(response.content)
+        video_paths = download_video(config)
+        audio_path = download_audio(config)
 
-    # cleanup([video_path, audio_path])
-    print("✅ Proceso completado.")
+        video_title = get_metadata(config["URL"])["title"]
+        number = get_episode_number(video_title)
+        serie_name_normalized = config["SERIE_NAME"].replace(" ", ".").lower()
+        for quality, video_path in video_paths:
+            ext = Path(video_path).suffix
+            filename = filename_template.format(
+                serie_name_normalized=serie_name_normalized,
+                number=number,
+                quality=quality,
+                ext=ext,
+            )
+            output = str(config["OUTPUT_FOLDER"] / filename)
+            merge_with_ffmpeg(video_path, audio_path, output)
+
+        info = get_metadata(config["URL"])
+        thumbnail = info.get("thumbnail", "")
+        filename = f"{serie_name_normalized}.capitulo.{number}.yt.thumbnail.jpg"
+        output = config["OUTPUT_FOLDER"] / filename
+        if not output.exists():
+            response = requests.get(thumbnail)
+            with open(output, "wb") as f:
+                f.write(response.content)
+
+        # cleanup([video_path, audio_path])
+        print("✅ Proceso completado.")
