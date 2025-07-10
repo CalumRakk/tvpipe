@@ -189,7 +189,7 @@ def sleep_progress(seconds):
 
 
 if __name__ == "__main__":
-    nine_pm_today = datetime.combine(datetime.now().date(), time(21, 0))
+    nine_pm_today = datetime.combine(datetime.now().date(), time(21, 30))
     while True:
         if datetime.now() < nine_pm_today:
             difference = nine_pm_today - datetime.now()
@@ -199,7 +199,7 @@ if __name__ == "__main__":
 
         url = get_episode_of_the_day()
         if url is None:
-            sleep(60)
+            sleep_progress(120)
             continue
 
         config = {
@@ -238,3 +238,4 @@ if __name__ == "__main__":
 
         # cleanup([video_path, audio_path])
         print("✅ Proceso completado.")
+        break
