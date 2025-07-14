@@ -23,3 +23,6 @@ avance/
 *.log
 HSL_LIVE/
 output/
+live_downloads/
+fonts/
+directo/

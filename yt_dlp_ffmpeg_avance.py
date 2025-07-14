@@ -2,7 +2,7 @@ from pathlib import Path
 
 import requests
 
-from yt_dlp_ffmpeg import (
+from utils.yt_dlp_tools import (
     download_audio,
     download_video,
     get_episode_number,
@@ -13,8 +13,8 @@ from yt_dlp_ffmpeg import (
 if __name__ == "__main__":
     config = {
         "SERIE_NAME": "desafio siglo xxi 2025",
-        "URL": "https://www.youtube.com/watch?v=O-zgFOVLdAU",
-        "QUALITIES": [1080],
+        "URL": "https://www.youtube.com/watch?v=707aqENykIA",
+        "QUALITIES": [720],
         "OUTPUT_FOLDER": Path("output"),
     }
     filename_template = "{serie_name_normalized}.capitulo.{number}.avance.yt.{quality}p{ext}"  # ext debe tener el punto
