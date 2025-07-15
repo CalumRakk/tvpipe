@@ -18,6 +18,7 @@ if __name__ == "__main__":
     # --- Configuracion de Telegram ---
     caption = "Capítulo 9 - Desafío Siglo XXI\n\n"
     chat_id = "me"
+    forward_chat_ids = [-1001446012480]
     thumbnail_output = "thumbnail_watermarked.jpg"
     watermark_text = "Visita https://t.me/eldesafio2"
     for episode_dled in main_loop(serie_name, qualities, output_folder, nine_pm_today):
@@ -30,6 +31,7 @@ if __name__ == "__main__":
             caption=caption,
             chat_id=chat_id,
             thumbnail_path=thumbnail_output,
+            forward=forward_chat_ids,
         )
         print(f"Archivos finales: {episode_dled}")
         break

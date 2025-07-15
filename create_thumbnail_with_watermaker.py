@@ -64,7 +64,8 @@ def create_watermark_layer(
     margin: int = 20,
     bg_padding: int = 10,
     bg_opacity: int = 128,
-    vertical_offset: int = 72,
+    vertical_offset: int = 165,
+    horizontal_offset: int = 215,
     color="yellow",
 ) -> Image.Image:
     """Crea una capa de marca de agua con texto y fondo."""
@@ -83,7 +84,7 @@ def create_watermark_layer(
     # Tamaño y posición del fondo
     bg_width = text_width + bg_padding * 2
     bg_height = text_height + bg_padding * 2
-    bg_x0 = base_image.width - bg_width - margin
+    bg_x0 = base_image.width - bg_width - margin - horizontal_offset
     bg_y0 = base_image.height - bg_height - margin - vertical_offset
     bg_x1 = bg_x0 + bg_width
     bg_y1 = bg_y0 + bg_height
@@ -143,7 +144,7 @@ def add_watermark_to_image(image_path: str, watermark_text: str, output_image: s
     font_path = (
         r"D:\github Leo\caracoltv-dl\fonts\Roboto\Roboto-VariableFont_wdth,wght.ttf"
     )
-    font_size = 54
+    font_size = 60
     font = load_font(font_path, font_size)
     add_watermark(image_path, watermark_text, font, output_image)
 
@@ -155,6 +156,6 @@ if __name__ == "__main__":
     # main(video_path, output_image, watermark_text)
 
     thumbnail_path = r"D:\github Leo\caracoltv-dl\output\desafio.siglo.xxi.2025.capitulo.09.yt.thumbnail.jpg"
-    watermark_text = "visita https://t.me/eldesafio2"
+    watermark_text = "Visita https://t.me/eldesafio2"
     output_image = "thumbnail_watermarked.jpg"
     add_watermark_to_image(thumbnail_path, watermark_text, output_image)
