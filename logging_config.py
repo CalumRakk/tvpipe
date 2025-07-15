@@ -1,4 +1,5 @@
 import logging
+import os
 
 
 def logger_formatter() -> logging.Formatter:
@@ -25,16 +26,24 @@ def handler_file(path: str, formatter: logging.Formatter) -> logging.FileHandler
 
 def setup_logging(path: str) -> None:
     """Configura el logging básico para la aplicación."""
-    # Obtén el formateador
     default_formatter = logger_formatter()
+    running_under_supervisord = any(
+        key in os.environ
+        for key in [
+            "SUPERVISOR_PROCESS_NAME",
+            "SUPERVISOR_ENABLED",
+            "SUPERVISOR_GROUP_NAME",
+        ]
+    )
+    handlers = [handler_stream(default_formatter)]
 
-    # Configura el logger raíz
+    if not running_under_supervisord:
+        # Solo usa FileHandler si NO estamos bajo supervisord
+        handlers.append(handler_file(path, default_formatter))
+
     logging.basicConfig(
         level=logging.DEBUG,
-        handlers=[
-            handler_stream(default_formatter),
-            handler_file(path, default_formatter),
-        ],
+        handlers=handlers,
     )
 
     # Silenciar loggers de librerías de terceros
