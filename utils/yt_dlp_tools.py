@@ -8,6 +8,9 @@ from typing import Optional, cast
 
 import yt_dlp
 
+MEMORY_FILE = Path("downloaded.log")
+MEMORY = {}
+
 
 def get_episode_of_the_day() -> Optional[str]:
     """Devuelve la url del capitulo del dia actual"""
@@ -57,9 +60,6 @@ def get_episode_number(string) -> str:
     if match:
         return match.group(1).zfill(2)
     raise Exception("No se encontró el número de episodio.")
-
-
-MEMORY = {}
 
 
 def get_metadata(url) -> dict:
@@ -223,3 +223,20 @@ def get_download_jobs(config):
     format_id = get_best_audio_format(url)
     download_jobs.append({"type": "audio", "quality": "best", "format_id": format_id})
     return download_jobs
+
+
+def already_downloaded_today():
+    today = datetime.now().strftime("%Y-%m-%d")
+    if not MEMORY_FILE.exists():
+        return False
+    with open(MEMORY_FILE, "r") as f:
+        for line in f:
+            if today in line:
+                return True
+    return False
+
+
+def register_download(number):
+    today = datetime.now().strftime("%Y-%m-%d")
+    with open(MEMORY_FILE, "a") as f:
+        f.write(f"{today}: episodio {number}\n")

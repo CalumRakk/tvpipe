@@ -5,20 +5,33 @@ from pathlib import Path
 import requests
 
 from utils.yt_dlp_tools import (
+    already_downloaded_today,
     download_media_item,
     get_download_jobs,
     get_episode_number,
     get_episode_of_the_day,
     get_metadata,
     merge_with_ffmpeg,
+    register_download,
     sleep_progress,
 )
 
 if __name__ == "__main__":
     nine_pm_today = datetime.combine(datetime.now().date(), time(21, 30))
     while True:
-        if datetime.now() < nine_pm_today:
-            difference = nine_pm_today - datetime.now()
+        today = datetime.now()
+        if today.weekday() >= 5:
+            print("Hoy es fin de semana. No hay capítulo.")
+            exit(0)
+        elif already_downloaded_today():
+            print("✅ El capítulo de hoy ya fue descargado.")
+            exit(0)
+
+        if today < nine_pm_today:
+            print(
+                f"El capítulo de hoy aun no ha comenzado. Siguiente descarga en {nine_pm_today - today}"
+            )
+            difference = nine_pm_today - today
             seconds = difference.total_seconds()
             sleep_progress(seconds)
             continue
@@ -86,6 +99,8 @@ if __name__ == "__main__":
             )
             output = str(config["OUTPUT_FOLDER"] / filename)
             merge_with_ffmpeg(video_path, audio_path, output)
+
+        register_download(number)
 
         info = get_metadata(config["URL"])
         thumbnail = info.get("thumbnail", "")
