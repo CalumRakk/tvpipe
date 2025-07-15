@@ -3,6 +3,7 @@ import logging
 import typing
 from datetime import datetime, time, timedelta
 from pathlib import Path
+from typing import TypedDict
 
 import requests
 
@@ -21,6 +22,11 @@ from series_manager.yt_dlp_tools import (
 
 TEMPLATE_VIDEO = "{serie_name}.capitulo.{number}.yt.{quality}p{ext}"
 TEMPLATE_THUMBNAIL = "{serie_name}.capitulo.{number}.yt.thumbnail.jpg"
+
+
+class EpisodeDownloaded(TypedDict):
+    videos: list[Path]
+    thumbnail: Path
 
 
 def should_skip_today(today):
@@ -106,11 +112,12 @@ def download_thumbnail(url: str, output_folder: Path, serie_name: str):
         with open(output, "wb") as f:
             f.write(response.content)
         logging.info(f"Miniatura descargada: {output}")
+    return output
 
 
 def main_loop(
     serie_name: str, qualities: list[int], output_folder: Path, release_time: datetime
-) -> typing.Generator[list[Path], None, None]:
+) -> typing.Generator[EpisodeDownloaded, None, None]:
     while True:
         today = datetime.now()
         end_of_day = datetime.combine(today.date(), time(23, 59, 59))
@@ -136,17 +143,17 @@ def main_loop(
         number = get_episode_number(video_title)
         serie_name_final = serie_name.replace(" ", ".").lower()
 
-        finales = merge_files(
+        videos = merge_files(
             downloaded_files,
             output_folder,
             serie_name_final,
             number,
         )
         register_download(number)
-        download_thumbnail(url, output_folder, serie_name_final)
+        thumbnail_path = download_thumbnail(url, output_folder, serie_name_final)
 
         logging.info("✅ Descarga del capítulo del día completada.")
-        yield finales
+        yield {"videos": videos, "thumbnail": thumbnail_path}
 
 
 if __name__ == "__main__":

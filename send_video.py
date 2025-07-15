@@ -1,4 +1,5 @@
 import json
+import logging
 from os import getenv
 from pathlib import Path
 from platform import system
@@ -13,6 +14,7 @@ from config import API_HASH, API_ID, CHAT_ID, PROJECT_NAME
 from series_manager.utils import get_video_metadata
 
 CACHE_PATH = "meta/upload_cache.json"
+logger = logging.getLogger(__name__)
 
 
 class Video(BaseModel):
@@ -25,9 +27,11 @@ class Video(BaseModel):
     format_name: str
 
 
-def progress(current, total, progress_bar: tqdm):
-    # print("\t", filename, f"{current * 100 / total:.1f}%", end="\r")
-    progress_bar.update(current - progress_bar.n)
+def progress(current, total, step=10):
+    # Solo imprime cuando se cruza un múltiplo de step
+    percentage = current * 100 / total
+    if percentage % step < (100 / total):
+        print(f"{percentage:.1f}%")
 
 
 def load_cache() -> dict[str, dict]:
@@ -73,14 +77,6 @@ def send_videos(
             messages.append(message)
             continue
 
-        progress_bar = tqdm(
-            total=video.size,
-            desc="Subiendo archivos",
-            unit="B",
-            unit_divisor=1024,
-            unit_scale=True,
-            leave=True,
-        )
         message = cast(
             Message,
             client.send_video(
@@ -89,7 +85,6 @@ def send_videos(
                 file_name=video_path.name,
                 caption=video_path.name,
                 progress=progress,
-                progress_args=(progress_bar,),
                 duration=video.duration,
                 width=video.width,
                 height=video.height,
@@ -152,6 +147,7 @@ def get_client_started(session_name: str = "leo") -> Client:
 def main(
     chat_id: Union[int, str], caption: str, video_paths: list[str], thumbnail_path: str
 ):
+    logger.info("Iniciando el envío de videos a Telegram")
     videos = get_videos(video_paths)
     client = get_client_started()
     caption_final = add_subcaption(caption, videos)
@@ -162,7 +158,7 @@ def main(
     client.delete_messages(chat_id, [message.id for message in messages])  # type: ignore
     client.stop()  # type: ignore
     clear_cache()
-    print("Listo")
+    logger.info("Envío de videos completado")
 
 
 if __name__ == "__main__":

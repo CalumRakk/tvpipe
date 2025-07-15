@@ -1,8 +1,27 @@
+import logging
 from pathlib import Path
 from typing import Union, cast
 
 import cv2
 from PIL import Image, ImageDraw, ImageFont
+
+logger = logging.getLogger(__name__)
+
+
+def resize_image(
+    input_path: Union[str, Path],
+    output_path: Union[str, Path],
+    max_height: int = 320,
+) -> None:
+    """Redimensiona una imagen a una altura máxima especificada."""
+    img = Image.open(input_path)
+    width, height = img.size
+    if height > max_height:
+        scale = max_height / height
+        width = int(width * scale)
+        height = max_height
+        img = img.resize((width, height), Image.LANCZOS)  # type: ignore
+    img.save(output_path, "JPEG")
 
 
 def extract_first_frame(
@@ -21,7 +40,7 @@ def extract_first_frame(
         raise RuntimeError("❌ No se pudo leer el primer frame.")
 
     cv2.imwrite(str(output_image), frame)
-    print(f"✅ Primer frame guardado en: {output_image}")
+    logger.debug(f"✅ Primer frame guardado en: {output_image}")
     return output_image
 
 
@@ -29,10 +48,10 @@ def load_font(font_path: str, font_size: int) -> ImageFont.FreeTypeFont:
     """Carga una fuente personalizada o usa la fuente por defecto."""
     try:
         font = ImageFont.truetype(font_path, font_size)
-        print(f"✅ Fuente cargada: {font_path}")
+        logger.debug(f"✅ Fuente cargada: {font_path}")
         return font
     except IOError:
-        print(
+        logger.debug(
             f"❌ No se pudo cargar la fuente '{font_path}'. Usando fuente por defecto."
         )
         return cast(ImageFont.FreeTypeFont, ImageFont.load_default())
@@ -45,7 +64,8 @@ def create_watermark_layer(
     margin: int = 20,
     bg_padding: int = 10,
     bg_opacity: int = 128,
-    vertical_offset: int = 50,
+    vertical_offset: int = 72,
+    color="yellow",
 ) -> Image.Image:
     """Crea una capa de marca de agua con texto y fondo."""
     txt_layer = Image.new("RGBA", base_image.size, (255, 255, 255, 0))
@@ -79,12 +99,12 @@ def create_watermark_layer(
     # Dibujar sombra y texto
     try:
         draw.text((text_x + 2, text_y + 2), text, font=font, fill="black", anchor="lt")
-        draw.text((text_x, text_y), text, font=font, fill="white", anchor="lt")
+        draw.text((text_x, text_y), text, font=font, fill=color, anchor="lt")
     except TypeError:
         manual_x = text_x - bbox[0]
         manual_y = text_y - bbox[1]
         draw.text((manual_x + 2, manual_y + 2), text, font=font, fill="black")
-        draw.text((manual_x, manual_y), text, font=font, fill="white")
+        draw.text((manual_x, manual_y), text, font=font, fill=color)
 
     return txt_layer
 
@@ -97,13 +117,13 @@ def add_watermark(
 ) -> None:
     """Agrega una marca de agua a una imagen y la guarda."""
     image = Image.open(image_path).convert("RGBA")
-    print(f"✅ Imagen base '{image_path}' cargada.")
+    logger.debug(f"✅ Imagen base '{image_path}' cargada.")
 
     watermark_layer = create_watermark_layer(image, watermark_text, font)
     watermarked = Image.alpha_composite(image, watermark_layer)
 
     watermarked.convert("RGB").save(output_path, "JPEG")
-    print(f"✅ Imagen final guardada como '{output_path}'")
+    logger.debug(f"✅ Imagen final guardada como '{output_path}'")
 
 
 def main(video_path: str, output_image: str, watermark_text: str) -> None:
@@ -118,8 +138,23 @@ def main(video_path: str, output_image: str, watermark_text: str) -> None:
     add_watermark(frame_image, watermark_text, font, output_image)
 
 
+def add_watermark_to_image(image_path: str, watermark_text: str, output_image: str):
+    """Agrega una marca de agua a una imagen existente."""
+    font_path = (
+        r"D:\github Leo\caracoltv-dl\fonts\Roboto\Roboto-VariableFont_wdth,wght.ttf"
+    )
+    font_size = 54
+    font = load_font(font_path, font_size)
+    add_watermark(image_path, watermark_text, font, output_image)
+
+
 if __name__ == "__main__":
-    video_path = r"D:\github Leo\caracoltv-dl\output\desafio.siglo.xxi.2025.capitulo.07.yt.720p.mp4"
+    # video_path = r"D:\github Leo\caracoltv-dl\output\desafio.siglo.xxi.2025.capitulo.07.yt.720p.mp4"
+    # output_image = "thumbnail_watermarked.jpg"
+    # watermark_text = "Visita https://t.me/eldesafio2"
+    # main(video_path, output_image, watermark_text)
+
+    thumbnail_path = r"D:\github Leo\caracoltv-dl\output\desafio.siglo.xxi.2025.capitulo.09.yt.thumbnail.jpg"
+    watermark_text = "visita https://t.me/eldesafio2"
     output_image = "thumbnail_watermarked.jpg"
-    watermark_text = "Visita https://t.me/eldesafio2"
-    main(video_path, output_image, watermark_text)
+    add_watermark_to_image(thumbnail_path, watermark_text, output_image)
