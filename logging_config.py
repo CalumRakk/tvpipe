@@ -23,7 +23,7 @@ def handler_file(path: str, formatter: logging.Formatter) -> logging.FileHandler
     return file_handler
 
 
-def setup_logging():
+def setup_logging(path: str) -> None:
     """Configura el logging básico para la aplicación."""
     # Obtén el formateador
     default_formatter = logger_formatter()
@@ -33,7 +33,7 @@ def setup_logging():
         level=logging.DEBUG,
         handlers=[
             handler_stream(default_formatter),
-            handler_file("general.log", default_formatter),
+            handler_file(path, default_formatter),
         ],
     )
 

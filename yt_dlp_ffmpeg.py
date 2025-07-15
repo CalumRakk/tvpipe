@@ -4,6 +4,7 @@ from pathlib import Path
 
 import requests
 
+from logging_config import setup_logging
 from utils.yt_dlp_tools import (
     already_downloaded_today,
     download_media_item,
@@ -17,6 +18,7 @@ from utils.yt_dlp_tools import (
 )
 
 if __name__ == "__main__":
+    setup_logging("logs/descarga_capitulo_del_dia.log")
     nine_pm_today = datetime.combine(datetime.now().date(), time(21, 30))
     while True:
         today = datetime.now()

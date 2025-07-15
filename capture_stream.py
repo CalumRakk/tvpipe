@@ -8,7 +8,7 @@ import requests
 from logging_config import setup_logging
 from utils.caracolstream import CaracolLiveStream
 
-setup_logging()
+setup_logging("capture_stream.log")
 
 logger = logging.getLogger(__name__)
 caracol = CaracolLiveStream()
