@@ -159,7 +159,7 @@ def main_loop(
 
 
 if __name__ == "__main__":
-    setup_logging("logs/descarga_capitulo_del_dia.log")
+    setup_logging(f"logs/{Path(__file__).stem}.log")
     serie_name = "desafio siglo xxi 2025"
     qualities = [240]
     output_folder = Path("output")

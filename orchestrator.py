@@ -7,7 +7,7 @@ from send_video import main as send_video_to_telegram
 from yt_dlp_ffmpeg import main_loop
 
 if __name__ == "__main__":
-    setup_logging("logs/descarga_capitulo_del_dia.log")
+    setup_logging(f"logs/{Path(__file__).stem}.log")
 
     # --- Configuracion de la serie y calidades ---
     serie_name = "desafio siglo xxi 2025"

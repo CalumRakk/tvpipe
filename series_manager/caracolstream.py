@@ -53,10 +53,15 @@ class CaracolLiveStream:
         logger.info("Master playlist loaded")
         return master
 
-    def fetch_best_playlist(self):
+    def fetch_best_playlist(self, include_resolution: bool = False):
+        """Fetch a la mejor playlist disponible.
+
+        include_resolution: Si True, incluye la resolución en el objeto playlist. Esto se hace de forma albirtaria al estandard m3u8.
+        """
         logger = logging.getLogger(__name__)
         master = self.fetch_master()
-        url = cast(str, master.playlists[0].uri)
+        index = 0
+        url = cast(str, master.playlists[index].uri)
 
         logger.info("URL PLAYLIST: " + url)
 
@@ -64,4 +69,12 @@ class CaracolLiveStream:
         response.raise_for_status()
         playlist = m3u8.loads(response.text)
         logger.info("Playlist loaded")
+        if include_resolution:
+            resolution = cast(
+                tuple[int, int], master.playlists[0].stream_info.resolution
+            )
+            resolution_format = f"{resolution[0]}x{resolution[1]}"
+            format_note = f"{resolution[1]}p"
+            setattr(playlist, "resolution", resolution_format)
+            setattr(playlist, "format_note", format_note)
         return playlist

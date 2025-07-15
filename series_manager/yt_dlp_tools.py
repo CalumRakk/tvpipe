@@ -20,6 +20,17 @@ CACHE = {}
 logger = logging.getLogger(__name__)
 
 
+def load_download_cache() -> dict[str, str]:
+    """Carga el cache de los capitulos descargados del día."""
+    if not PATH_DOWNLOAD_CACHE.exists():
+        return {}
+    with open(PATH_DOWNLOAD_CACHE, "r") as f:
+        # ejemplo de dict : {"2023-10-01": "capitulo 09", "2023-10-02": "capitulo 02"}
+        return {
+            line.split(":")[0]: line.split(":")[1].strip() for line in f.readlines()
+        }
+
+
 def get_episode_of_the_day() -> Optional[str]:
     """Devuelve la url del capitulo del dia actual"""
     logger.info("Consiguiendo el episodio del día...")
@@ -264,9 +275,10 @@ def already_downloaded_today():
 
 
 def register_download(number):
+    # FIXME: si se prueba el código asegurate de eliminar el registro del dia. Sino el main_loop podria pensar que ya se ha descargado el episodio del dia.
     today = datetime.now().strftime("%Y-%m-%d")
     with open(PATH_DOWNLOAD_CACHE, "a") as f:
-        f.write(f"{today}: episodio {number}\n")
+        f.write(f"{today}: capitulo {number}\n")
 
 
 def load_cache():
