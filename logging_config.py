@@ -73,6 +73,7 @@ def setup_logging(path: str) -> None:
         "undetected_chromedriver",
         "hpack",
         "peewee",
+        "pyrogram",
     ]
     for lib_name in libraries_to_silence:
         logging.getLogger(lib_name).setLevel(logging.CRITICAL)

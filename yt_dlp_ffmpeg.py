@@ -1,5 +1,6 @@
 import concurrent.futures
 import logging
+import typing
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
@@ -71,13 +72,16 @@ def parallel_download(download_jobs, temp_folder):
     return downloaded_files
 
 
-def merge_files(downloaded_files, output_folder: Path, serie_name, number):
+def merge_files(
+    downloaded_files, output_folder: Path, serie_name, number
+) -> list[Path]:
     """Merge los archivos de video y audio descargados."""
     if "audio" not in downloaded_files or "videos" not in downloaded_files:
         logging.error("No se encontraron archivos de audio o video para fusionar.")
-        return
+        raise ValueError("No se encontraron archivos de audio o video para fusionar.")
 
     audio_path = downloaded_files["audio"]
+    finales = []
     for quality, video_path in downloaded_files["videos"].items():
         ext = Path(video_path).suffix
         filename = TEMPLATE_VIDEO.format(
@@ -86,6 +90,8 @@ def merge_files(downloaded_files, output_folder: Path, serie_name, number):
         output = output_folder / filename
         merge_with_ffmpeg(video_path, audio_path, str(output))
         logging.info(f"Archivo final: {output}")
+        finales.append(output)
+    return finales
 
 
 def download_thumbnail(url: str, output_folder: Path, serie_name: str):
@@ -104,17 +110,17 @@ def download_thumbnail(url: str, output_folder: Path, serie_name: str):
 
 def main_loop(
     serie_name: str, qualities: list[int], output_folder: Path, release_time: datetime
-):
+) -> typing.Generator[list[Path], None, None]:
     while True:
         today = datetime.now()
         end_of_day = datetime.combine(today.date(), time(23, 59, 59))
 
-        if should_skip_today(today):
-            sleep_progress((end_of_day - today).total_seconds())
-            continue
+        # if should_skip_today(today):
+        #     sleep_progress((end_of_day - today).total_seconds())
+        #     continue
 
-        if wait_until_release(today, release_time):
-            continue
+        # if wait_until_release(today, release_time):
+        #     continue
 
         url = get_episode_of_the_day()
         if not url:
@@ -130,7 +136,7 @@ def main_loop(
         number = get_episode_number(video_title)
         serie_name_final = serie_name.replace(" ", ".").lower()
 
-        merge_files(
+        finales = merge_files(
             downloaded_files,
             output_folder,
             serie_name_final,
@@ -139,8 +145,8 @@ def main_loop(
         register_download(number)
         download_thumbnail(url, output_folder, serie_name_final)
 
-        logging.info("✅ Proceso completado.")
-        break
+        logging.info("✅ Descarga del capítulo del día completada.")
+        yield finales
 
 
 if __name__ == "__main__":
@@ -150,5 +156,6 @@ if __name__ == "__main__":
     output_folder = Path("output")
     nine_pm_today = datetime.combine(datetime.now().date(), time(21, 30))
 
-    main_loop(serie_name, qualities, output_folder, release_time=nine_pm_today)
-    logging.info("✅ Proceso completado.")
+    for final_files in main_loop(serie_name, qualities, output_folder, nine_pm_today):
+        logging.info(f"Archivos finales: {final_files}")
+        break
