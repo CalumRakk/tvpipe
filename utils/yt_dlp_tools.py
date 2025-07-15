@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import subprocess
@@ -8,8 +9,10 @@ from typing import Optional, cast
 
 import yt_dlp
 
-MEMORY_FILE = Path("downloaded.log")
+PATH_DOWNLOAD_CACHE = Path("meta/downloaded.log")
 MEMORY = {}
+CACHE_FILE = Path("meta/metadata_cache.json")
+CACHE = {}
 
 
 def get_episode_of_the_day() -> Optional[str]:
@@ -29,13 +32,13 @@ def get_episode_of_the_day() -> Optional[str]:
                 url = entry["url"]
                 number = get_episode_number(
                     title
-                )  # Se usa para comprobar que el titulo contenga la palabra "capitulo", en caso contrario dará error y saltara al siguiente video
+                )  # Se usa para comprobar que el titulo contenga la palabra "capitulo", en caso contrario dará error a la siguiente url
                 info = get_metadata(url)
                 timestamp = datetime.fromtimestamp(info["timestamp"])
                 is_today = timestamp.date() == datetime.now().date()
-                if not is_today:
-                    continue
-                return url
+                is_live = info["was_live"]
+                if is_today or is_live is False:
+                    return url
             except Exception as e:
                 continue
 
@@ -60,16 +63,6 @@ def get_episode_number(string) -> str:
     if match:
         return match.group(1).zfill(2)
     raise Exception("No se encontró el número de episodio.")
-
-
-def get_metadata(url) -> dict:
-    if url in MEMORY:
-        return MEMORY[url]
-
-    with yt_dlp.YoutubeDL() as ydl:
-        info_dict = cast(dict, ydl.extract_info(url, download=False))
-        MEMORY[url] = info_dict
-    return info_dict
 
 
 def get_best_video_format(url, target_height: int) -> str:
@@ -227,9 +220,9 @@ def get_download_jobs(config):
 
 def already_downloaded_today():
     today = datetime.now().strftime("%Y-%m-%d")
-    if not MEMORY_FILE.exists():
+    if not PATH_DOWNLOAD_CACHE.exists():
         return False
-    with open(MEMORY_FILE, "r") as f:
+    with open(PATH_DOWNLOAD_CACHE, "r") as f:
         for line in f:
             if today in line:
                 return True
@@ -238,5 +231,38 @@ def already_downloaded_today():
 
 def register_download(number):
     today = datetime.now().strftime("%Y-%m-%d")
-    with open(MEMORY_FILE, "a") as f:
+    with open(PATH_DOWNLOAD_CACHE, "a") as f:
         f.write(f"{today}: episodio {number}\n")
+
+
+def load_cache():
+    global CACHE
+    if CACHE_FILE.exists():
+        with open(CACHE_FILE, "r") as f:
+            CACHE = json.load(f)
+    else:
+        CACHE = {}
+
+
+def save_cache():
+    with open(CACHE_FILE, "w") as f:
+        json.dump(CACHE, f, indent=2)
+
+
+def get_metadata(url: str) -> dict:
+    load_cache()
+    now = datetime.now()
+
+    entry = CACHE.get(url)
+    if entry:
+        timestamp = datetime.fromisoformat(entry["timestamp"])
+        if now - timestamp < timedelta(hours=24):
+            return entry["info"]
+
+    with yt_dlp.YoutubeDL() as ydl:
+        info_dict = cast(dict, ydl.extract_info(url, download=False))
+
+    # Actualizar cache
+    CACHE[url] = {"timestamp": now.isoformat(), "info": info_dict}
+    save_cache()
+    return info_dict
