@@ -18,120 +18,137 @@ from series_manager.yt_dlp_tools import (
     sleep_progress,
 )
 
-if __name__ == "__main__":
-    # -------- CONFIGURACIÓN --------
-    config = {
-        "SERIE_NAME": "desafio siglo xxi 2025",
-        "QUALITIES": [720, 360],
-        "OUTPUT_FOLDER": Path("output"),
-    }
-    filename_template = "{serie_name_normalized}.capitulo.{number}.yt.{quality}p{ext}"  # ext debe tener el punto
+TEMPLATE_VIDEO = "{serie_name}.capitulo.{number}.yt.{quality}p{ext}"
+TEMPLATE_THUMBNAIL = "{serie_name}.capitulo.{number}.yt.thumbnail.jpg"
 
-    # -------- LOGGING --------
-    setup_logging("logs/descarga_capitulo_del_dia.log")
-    logger = logging.getLogger(__name__)
-    logger.info("🚀 Iniciando descarga de capítulo de hoy...")
 
-    # -------- DESCARGAS --------
+def should_skip_today(today):
+    """Determina si se debe omitir la descarga del capítulo hoy."""
+    if today.weekday() >= 5:
+        logging.info("Hoy es fin de semana. No hay capítulo.")
+        return True
+    if already_downloaded_today():
+        logging.info("✅ El capítulo de hoy ya fue descargado.")
+        return True
+    return False
 
-    nine_pm_today = datetime.combine(datetime.now().date(), time(21, 30))
+
+def wait_until_release(today: datetime, release_time):
+    """Espera hasta la hora de lanzamiento del capítulo (especificada en release_time)."""
+    if today < release_time:
+        difference = release_time - today
+        logging.info(f"Aún no es hora. Esperando {difference}.")
+        sleep_progress(difference.total_seconds())
+        return True
+    return False
+
+
+def prepare_folders(output_folder):
+    """Prepara las carpetas necesarias para la descarga."""
+    temp_folder = output_folder / "TEMP"
+    temp_folder.mkdir(parents=True, exist_ok=True)
+    output_folder.mkdir(exist_ok=True)
+    return temp_folder
+
+
+def parallel_download(download_jobs, temp_folder):
+    """Descarga los archivos de forma paralela utilizando ProcessPoolExecutor."""
+    downloaded_files = {}
+    with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+        futures = {
+            executor.submit(
+                download_media_item, job["url"], job["format_id"], temp_folder
+            ): job
+            for job in download_jobs
+        }
+        for future in concurrent.futures.as_completed(futures):
+            job = futures[future]
+            result = future.result()
+            if job["type"] == "audio":
+                downloaded_files["audio"] = result
+            else:
+                downloaded_files.setdefault("videos", {})[job["quality"]] = result
+    return downloaded_files
+
+
+def merge_files(downloaded_files, output_folder: Path, serie_name, number):
+    """Merge los archivos de video y audio descargados."""
+    if "audio" not in downloaded_files or "videos" not in downloaded_files:
+        logging.error("No se encontraron archivos de audio o video para fusionar.")
+        return
+
+    audio_path = downloaded_files["audio"]
+    for quality, video_path in downloaded_files["videos"].items():
+        ext = Path(video_path).suffix
+        filename = TEMPLATE_VIDEO.format(
+            serie_name=serie_name, number=number, quality=quality, ext=ext
+        )
+        output = output_folder / filename
+        merge_with_ffmpeg(video_path, audio_path, str(output))
+        logging.info(f"Archivo final: {output}")
+
+
+def download_thumbnail(url: str, output_folder: Path, serie_name: str):
+    """Descarga la miniatura del episodio si no está descargada."""
+    metadata = get_metadata(url)
+    number = get_episode_number(metadata["title"])
+    thumbnail = metadata.get("thumbnail")
+    filename = TEMPLATE_THUMBNAIL.format(serie_name=serie_name, number=number)
+    output = output_folder / filename
+    if not output.exists() and thumbnail:
+        response = requests.get(thumbnail)
+        with open(output, "wb") as f:
+            f.write(response.content)
+        logging.info(f"Miniatura descargada: {output}")
+
+
+def main_loop(
+    serie_name: str, qualities: list[int], output_folder: Path, release_time: datetime
+):
     while True:
         today = datetime.now()
-        end_of_the_day = datetime.combine(datetime.now().date(), time(23, 59, 59))
-        if today.weekday() >= 5:
-            logger.info("Hoy es fin de semana. No hay capítulo.")
-            difference = end_of_the_day - today
-            logger.info(f"Proxima comprobacion el dia siguiente.")
-            sleep_progress(difference.total_seconds())
-            continue
-        elif already_downloaded_today():
-            logger.info("✅ El capítulo de hoy ya fue descargado.")
-            difference = end_of_the_day - today
-            logger.info(f"Proxima comprobacion el dia siguiente.")
-            sleep_progress(difference.total_seconds())
-            continue
+        end_of_day = datetime.combine(today.date(), time(23, 59, 59))
 
-        if today < nine_pm_today:
-            logger.info(
-                f"El capítulo de hoy aun no ha comenzado. Siguiente descarga en {nine_pm_today - today}"
-            )
-            difference = nine_pm_today - today
-            sleep_progress(difference.total_seconds())
-            continue
+        # if should_skip_today(today):
+        #     sleep_progress((end_of_day - today).total_seconds())
+        #     continue
+
+        # if wait_until_release(today, release_time):
+        #     continue
 
         url = get_episode_of_the_day()
-        if url is None:
+        if not url:
             sleep_progress(120)
             continue
-        config["URL"] = url
 
-        # Crear carpetas de salida si no existen
-        temp_folder = config["OUTPUT_FOLDER"] / "TEMP"
-        temp_folder.mkdir(parents=True, exist_ok=True)
-        config["OUTPUT_FOLDER"].mkdir(exist_ok=True)
+        temp_folder = prepare_folders(output_folder)
 
-        # 1. PREPARAR TRABAJOS (JOBS)
-        download_jobs = get_download_jobs(config)
+        download_jobs = get_download_jobs(url, qualities)
+        downloaded_files = parallel_download(download_jobs, temp_folder)
 
-        # 2. EJECUTAR DESCARGAS EN PARALELO
-        downloaded_files = {}
-        with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-            logger.info(f"🚀 Iniciando {len(download_jobs)} descargas en paralelo...")
-
-            future_to_job = {
-                executor.submit(
-                    download_media_item, url, job["format_id"], temp_folder
-                ): job
-                for job in download_jobs
-            }
-
-            for future in concurrent.futures.as_completed(future_to_job):
-                job = future_to_job[future]
-                try:
-                    filepath = future.result()
-                    if job["type"] == "audio":
-                        downloaded_files["audio"] = filepath
-                        logger.info(f"✔️ Audio descargado {filepath}")
-                    else:
-                        if "videos" not in downloaded_files:
-                            downloaded_files["videos"] = {}
-                        downloaded_files["videos"][job["quality"]] = filepath
-                        logger.info(f"✔️ Video descargado {filepath}")
-                except Exception as exc:
-                    logger.error(
-                        f"Falló la descarga para {job['type']} {job['quality']}: {exc}"
-                    )
-
-        # 3. MERGEAR CON FFMPEG
-        logger.info("🎉 Comenzando fusión con FFMPEG...")
-        video_title = get_metadata(config["URL"])["title"]
+        video_title = get_metadata(url)["title"]
         number = get_episode_number(video_title)
-        serie_name_normalized = config["SERIE_NAME"].replace(" ", ".").lower()
+        serie_name_final = serie_name.replace(" ", ".").lower()
 
-        audio_path = downloaded_files["audio"]
-        for quality, video_path in downloaded_files["videos"].items():
-            ext = Path(video_path).suffix
-            filename = filename_template.format(
-                serie_name_normalized=serie_name_normalized,
-                number=number,
-                quality=quality,
-                ext=ext,
-            )
-            output = str(config["OUTPUT_FOLDER"] / filename)
-            merge_with_ffmpeg(video_path, audio_path, output)
-            logger.info(f"✔️ Archivo final: {output}")
-
+        merge_files(
+            downloaded_files,
+            output_folder,
+            serie_name_final,
+            number,
+        )
         register_download(number)
+        download_thumbnail(url, output_folder, serie_name_final)
 
-        info = get_metadata(config["URL"])
-        thumbnail = info.get("thumbnail", "")
-        filename = f"{serie_name_normalized}.capitulo.{number}.yt.thumbnail.jpg"
-        output = config["OUTPUT_FOLDER"] / filename
-        if not output.exists():
-            response = requests.get(thumbnail)
-            with open(output, "wb") as f:
-                f.write(response.content)
-            logger.info(f"✔️ Miminiatura descargada: {output}")
-        # cleanup([video_path, audio_path])
-        logger.info("✅ Proceso completado.")
+        logging.info("✅ Proceso completado.")
         break
+
+
+if __name__ == "__main__":
+    setup_logging("logs/descarga_capitulo_del_dia.log")
+    serie_name = "desafio siglo xxi 2025"
+    qualities = [240]
+    output_folder = Path("output")
+    nine_pm_today = datetime.combine(datetime.now().date(), time(21, 30))
+
+    main_loop(serie_name, qualities, output_folder, release_time=nine_pm_today)
+    logging.info("✅ Proceso completado.")

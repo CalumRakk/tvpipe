@@ -1,6 +1,7 @@
 import io
 import json
 import logging
+import math
 import os
 import re
 import subprocess
@@ -150,6 +151,8 @@ def merge_with_ffmpeg(video_path: str, audio_path: str, output: str) -> None:
     logger.info("Uniendo video y audio con FFmpeg...")
     cmd = [
         "ffmpeg",
+        "-loglevel",
+        "error",  # <= nivel de log de ffmpeg
         "-i",
         video_path,
         "-i",
@@ -187,6 +190,26 @@ def sleep_progress(seconds):
             logger.info(f"Esperando {minutes} minutos antes de continuar...")
 
 
+def my_progress_hook(d):
+    path = Path(d.get("filename"))
+    if d["status"] == "downloading":
+        total_bytes = d.get("total_bytes") or d.get("total_bytes_estimate")
+        downloaded = d.get("downloaded_bytes", 0)
+        if total_bytes:
+            percent = downloaded / total_bytes * 100
+            # Solo muestra cada 10 %
+            step = 10
+            current_step = math.floor(percent / step) * step
+            if (
+                not hasattr(my_progress_hook, "last_step")
+                or current_step != my_progress_hook.last_step
+            ):
+                my_progress_hook.last_step = current_step
+                print(f"{path.name} descargando: {current_step}%")
+    elif d["status"] == "finished":
+        print(f"{path.name} Descarga completada.")
+
+
 def download_media_item(url: str, format_id: str, output_folder: Path) -> str:
     """
     Descarga un único item (video o audio) usando un format_id específico.
@@ -202,6 +225,9 @@ def download_media_item(url: str, format_id: str, output_folder: Path) -> str:
         "no_warnings": True,
         "retries": 10,  # Reintentos en caso de fallo de red
         "fragment_retries": 10,
+        "progress_hooks": [my_progress_hook],
+        "progress": None,
+        "noprogress": True,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -211,17 +237,18 @@ def download_media_item(url: str, format_id: str, output_folder: Path) -> str:
         return filepath
 
 
-def get_download_jobs(config):
+def get_download_jobs(url: str, qualities: list[int]):
     download_jobs = []
-    url = config["URL"]
-    for quality in config["QUALITIES"]:
+    for quality in qualities:
         format_id = get_best_video_format(url, quality)
         download_jobs.append(
-            {"type": "video", "quality": quality, "format_id": format_id}
+            {"type": "video", "quality": quality, "format_id": format_id, "url": url}
         )
 
     format_id = get_best_audio_format(url)
-    download_jobs.append({"type": "audio", "quality": "best", "format_id": format_id})
+    download_jobs.append(
+        {"type": "audio", "quality": "best", "format_id": format_id, "url": url}
+    )
     return download_jobs
 
 
@@ -314,16 +341,18 @@ def resize_and_compress_image(
         img.save(buffer, format="JPEG", quality=quality)
         size = buffer.tell()
 
-        print(f"Calidad={quality} => {size} bytes")
+        logger.info(f"Calidad={quality} => {size} bytes")
 
         if size <= max_bytes:
             with open(output_path, "wb") as f:
                 f.write(buffer.getvalue())
-            print(f"Imagen guardada: {output_path} ({size} bytes)")
+            logger.info(f"Imagen guardada: {output_path} ({size} bytes)")
             break
 
         if quality - step >= 20:
             quality -= step
         else:
-            print("No se pudo reducir más la calidad para alcanzar el tamaño deseado.")
+            logger.info(
+                "No se pudo reducir más la calidad para alcanzar el tamaño deseado."
+            )
             break
