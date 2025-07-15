@@ -26,3 +26,5 @@ output/
 live_downloads/
 fonts/
 directo/
+*.jpg
+test/

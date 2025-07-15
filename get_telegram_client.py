@@ -22,12 +22,12 @@ client = Client(
 )
 client.start()
 
-for message in client.get_chat_history(CHAT_ID):
-    if message.caption is None:
-        continue
+# for message in client.get_chat_history(CHAT_ID):
+#     if message.caption is None:
+#         continue
 
-    if "Desafío The Box 2022" in message.caption and not ("#" in message.caption):
-        new_caption = message.caption + "\n\n#Desafío #Desafío2022 #TheBox2"
-        client.edit_message_caption(CHAT_ID, message.id, new_caption)  # type: ignore
+#     if "Desafío The Box 2022" in message.caption and not ("#" in message.caption):
+#         new_caption = message.caption + "\n\n#Desafío #Desafío2022 #TheBox2"
+#         client.edit_message_caption(CHAT_ID, message.id, new_caption)  # type: ignore
 
-    time.sleep(0.5)
+#     time.sleep(0.5)

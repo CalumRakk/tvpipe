@@ -37,20 +37,26 @@ if __name__ == "__main__":
     nine_pm_today = datetime.combine(datetime.now().date(), time(21, 30))
     while True:
         today = datetime.now()
+        end_of_the_day = datetime.combine(datetime.now().date(), time(23, 59, 59))
         if today.weekday() >= 5:
             logger.info("Hoy es fin de semana. No hay capítulo.")
-            exit(0)
+            difference = end_of_the_day - today
+            logger.info(f"Proxima comprobacion el dia siguiente.")
+            sleep_progress(difference.total_seconds())
+            continue
         elif already_downloaded_today():
             logger.info("✅ El capítulo de hoy ya fue descargado.")
-            exit(0)
+            difference = end_of_the_day - today
+            logger.info(f"Proxima comprobacion el dia siguiente.")
+            sleep_progress(difference.total_seconds())
+            continue
 
         if today < nine_pm_today:
             logger.info(
                 f"El capítulo de hoy aun no ha comenzado. Siguiente descarga en {nine_pm_today - today}"
             )
             difference = nine_pm_today - today
-            seconds = difference.total_seconds()
-            sleep_progress(seconds)
+            sleep_progress(difference.total_seconds())
             continue
 
         url = get_episode_of_the_day()

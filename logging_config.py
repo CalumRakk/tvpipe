@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 
 
 def logger_formatter() -> logging.Formatter:
@@ -24,9 +25,24 @@ def handler_file(path: str, formatter: logging.Formatter) -> logging.FileHandler
     return file_handler
 
 
+def handler_supervisor_stdout(formatter: logging.Formatter) -> logging.StreamHandler:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.DEBUG)
+    # handler.addFilter(lambda record: record.levelno < logging.WARNING)
+    handler.setFormatter(formatter)
+    return handler
+
+
+def handler_supervisor_stderr(formatter: logging.Formatter) -> logging.StreamHandler:
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(logging.WARNING)
+    handler.setFormatter(formatter)
+    return handler
+
+
 def setup_logging(path: str) -> None:
-    """Configura el logging básico para la aplicación."""
-    default_formatter = logger_formatter()
+    formatter = logger_formatter()
+
     running_under_supervisord = any(
         key in os.environ
         for key in [
@@ -35,11 +51,14 @@ def setup_logging(path: str) -> None:
             "SUPERVISOR_GROUP_NAME",
         ]
     )
-    handlers = [handler_stream(default_formatter)]
 
-    if not running_under_supervisord:
-        # Solo usa FileHandler si NO estamos bajo supervisord
-        handlers.append(handler_file(path, default_formatter))
+    if running_under_supervisord:
+        handlers = [
+            handler_supervisor_stdout(formatter),
+            handler_supervisor_stderr(formatter),
+        ]
+    else:
+        handlers = [handler_stream(formatter), handler_file(path, formatter)]
 
     logging.basicConfig(
         level=logging.DEBUG,

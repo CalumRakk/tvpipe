@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -9,6 +10,7 @@ from time import sleep
 from typing import Optional, cast
 
 import yt_dlp
+from PIL import Image
 
 PATH_DOWNLOAD_CACHE = Path("meta/downloaded.log")
 MEMORY = {}
@@ -272,3 +274,56 @@ def get_metadata(url: str) -> dict:
     CACHE[url] = {"timestamp": now.isoformat(), "info": info_dict}
     save_cache()
     return info_dict
+
+
+def resize_and_compress_image(
+    input_path, output_path, max_bytes, max_height=320, step=5, initial_quality=95
+):
+    """Redimensiona y compresiona una imagen JPEG.
+
+    Args:
+        input_path (str): Ruta de la imagen a redimensionar.
+        output_path (str): Ruta de la imagen redimensionada y compresionada.
+        max_bytes (int): Tamaño máximo en bytes de la imagen redimensionada y compresionada.
+        max_height (int, optional): Altura máxima de la imagen redimensionada. Por defecto es 320.
+        step (int, optional): Paso de calidad para la compresión. Por defecto es 5.
+        initial_quality (int, optional): Calidad inicial para la compresión. Por defecto es 95.
+
+    Example:
+        resize_and_compress_image(
+            input_path="thumbnail_watermarked.jpg",
+            output_path="salida.jpg",
+            max_bytes=50 * 1024,  # 50 KB
+            max_height=320,
+        )
+
+    """
+    img = Image.open(input_path)
+
+    width, height = img.size
+    if height > max_height:
+        scale = max_height / height
+        width = int(width * scale)
+        height = max_height
+        img = img.resize((width, height), Image.LANCZOS)  # type: ignore
+
+    quality = initial_quality
+
+    while True:
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=quality)
+        size = buffer.tell()
+
+        print(f"Calidad={quality} => {size} bytes")
+
+        if size <= max_bytes:
+            with open(output_path, "wb") as f:
+                f.write(buffer.getvalue())
+            print(f"Imagen guardada: {output_path} ({size} bytes)")
+            break
+
+        if quality - step >= 20:
+            quality -= step
+        else:
+            print("No se pudo reducir más la calidad para alcanzar el tamaño deseado.")
+            break
