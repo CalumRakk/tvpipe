@@ -37,7 +37,9 @@ def get_videos(video_paths: list[str]) -> list[Video]:
     return videos
 
 
-def send_videos(chat_id: Union[int, str], videos: list[Video]) -> list[Message]:
+def send_videos(
+    chat_id: Union[int, str], videos: list[Video], thumbnail_path: str
+) -> list[Message]:
     """Sube los videos a Telegram y devuelve una lista de mensajes."""
     messages = []
     for video in videos:
@@ -60,7 +62,7 @@ def send_videos(chat_id: Union[int, str], videos: list[Video]) -> list[Message]:
             duration=video.duration,
             width=video.width,
             height=video.height,
-            thumb=r"thumbnail_watermarked.jpg",
+            thumb=thumbnail_path,
             disable_notification=True,
         )
         messages.append(message)
@@ -89,13 +91,14 @@ def add_subcaption(caption: str, videos: list[Video]) -> str:
     return caption
 
 
-def main(chat_id: Union[int, str], caption: str, video_paths: list[str]):
+def main(
+    chat_id: Union[int, str], caption: str, video_paths: list[str], thumbnail_path: str
+):
     videos = get_videos(video_paths)
 
     caption_final = add_subcaption(caption, videos)
-    messages = resend_videos_as_media_group(
-        chat_id, caption_final, send_videos(chat_id, videos)
-    )
+    messages = send_videos(chat_id, videos, thumbnail_path)
+    resend_videos_as_media_group(chat_id, caption=caption_final, messages=messages)
     client.delete_messages(chat_id, [message.id for message in messages])  # type: ignore
     client.stop()  # type: ignore
 
@@ -110,5 +113,12 @@ if __name__ == "__main__":
         r"D:\Carpetas Leo\norma\video\Random Videos on the Internet_2.mp4",
     ]
     chat_id = "me"
+    thumbnail_path = "thumbnail_watermarked.jpg"
+
     # ---------------------
-    main(chat_id=chat_id, caption=caption, video_paths=video_paths)
+    main(
+        chat_id=chat_id,
+        caption=caption,
+        video_paths=video_paths,
+        thumbnail_path=thumbnail_path,
+    )
