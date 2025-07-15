@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import subprocess
@@ -13,10 +14,12 @@ PATH_DOWNLOAD_CACHE = Path("meta/downloaded.log")
 MEMORY = {}
 CACHE_FILE = Path("meta/metadata_cache.json")
 CACHE = {}
+logger = logging.getLogger(__name__)
 
 
 def get_episode_of_the_day() -> Optional[str]:
     """Devuelve la url del capitulo del dia actual"""
+    logger.info("Consiguiendo el episodio del día...")
     url = "https://www.youtube.com/@desafiocaracol/videos"
     ydl_opts = {
         "extract_flat": True,
@@ -38,9 +41,11 @@ def get_episode_of_the_day() -> Optional[str]:
                 is_today = timestamp.date() == datetime.now().date()
                 is_live = info["was_live"]
                 if is_today or is_live is False:
+                    logger.info(f"✔️ Encontrado el episodio del dia: {title}")
                     return url
             except Exception as e:
                 continue
+        logger.info(f"❌ No se encontró el episodio del dia: {title}")
 
 
 def get_episode_number(string) -> str:
@@ -83,7 +88,7 @@ def get_best_video_format(url, target_height: int) -> str:
 
     candidates.sort(key=lambda x: x.get("filesize") or 0, reverse=True)
     best = candidates[0]
-    print(
+    logger.info(
         f"✅ Mejor video {target_height}p: format_id={best['format_id']}, bitrate={best['tbr']}k, ext={best['ext']}"
     )
     return best["format_id"]
@@ -129,7 +134,7 @@ def download_audio(config) -> str:
     ydl_opts_audio = {"format": "bestaudio", "outtmpl": output, "continue_dl": True}
 
     with yt_dlp.YoutubeDL(ydl_opts_audio) as ydl:
-        print("Descargando audio...")
+        logger.info("Descargando audio...")
         info = cast(dict, ydl.extract_info(url, download=True))
         return info["requested_downloads"][0]["filepath"]
 
@@ -137,10 +142,10 @@ def download_audio(config) -> str:
 def merge_with_ffmpeg(video_path: str, audio_path: str, output: str) -> None:
     # TODO: Usar doble comillas para encerrar las ruta, solo funciona en windows
     if os.path.exists(output):
-        print(f"El archivo {output} ya existe. Omitiendo fusión.")
+        logger.info(f"El archivo {output} ya existe. Omitiendo fusión.")
         return
 
-    print("Uniendo video y audio con FFmpeg...")
+    logger.info("Uniendo video y audio con FFmpeg...")
     cmd = [
         "ffmpeg",
         "-i",
@@ -157,11 +162,11 @@ def merge_with_ffmpeg(video_path: str, audio_path: str, output: str) -> None:
         output,
     ]
     subprocess.run(cmd, check=True)
-    print(f"Archivo final: {output}")
+    logger.info(f"Archivo final: {output}")
 
 
 def cleanup(paths: list[str]) -> None:
-    print("Limpiando archivos temporales...")
+    logger.info("Limpiando archivos temporales...")
     for path in paths:
         if os.path.exists(path):
             os.remove(path)
@@ -170,14 +175,14 @@ def cleanup(paths: list[str]) -> None:
 def sleep_progress(seconds):
     minutes = int(timedelta(seconds=seconds).total_seconds() // 60)
 
-    print(f"Esperando {minutes} minutos antes de continuar...")
+    logger.info(f"Esperando {minutes} minutos antes de continuar...")
     count = 0
     for i in range(int(seconds), 0, -1):
         sleep(1)
         count += 1
         if count % 60 == 0:
             minutes -= 1
-            print(f"Esperando {minutes} minutos antes de continuar...")
+            logger.info(f"Esperando {minutes} minutos antes de continuar...")
 
 
 def download_media_item(url: str, format_id: str, output_folder: Path) -> str:
@@ -200,7 +205,7 @@ def download_media_item(url: str, format_id: str, output_folder: Path) -> str:
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = cast(dict, ydl.extract_info(url, download=True))
         filepath = info["requested_downloads"][0]["filepath"]
-        print(f"✔️ Descarga completada: {Path(filepath).name}")
+        logger.info(f"✔️ Descarga completada: {Path(filepath).name}")
         return filepath
 
 
@@ -259,7 +264,8 @@ def get_metadata(url: str) -> dict:
         if now - timestamp < timedelta(hours=24):
             return entry["info"]
 
-    with yt_dlp.YoutubeDL() as ydl:
+    ydl_opts = {"quiet": True}
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = cast(dict, ydl.extract_info(url, download=False))
 
     # Actualizar cache

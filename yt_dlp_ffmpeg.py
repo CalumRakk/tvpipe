@@ -1,4 +1,5 @@
 import concurrent.futures
+import logging
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
@@ -18,19 +19,33 @@ from utils.yt_dlp_tools import (
 )
 
 if __name__ == "__main__":
+    # -------- CONFIGURACIÓN --------
+    config = {
+        "SERIE_NAME": "desafio siglo xxi 2025",
+        "QUALITIES": [720, 360],
+        "OUTPUT_FOLDER": Path("output"),
+    }
+    filename_template = "{serie_name_normalized}.capitulo.{number}.yt.{quality}p{ext}"  # ext debe tener el punto
+
+    # -------- LOGGING --------
     setup_logging("logs/descarga_capitulo_del_dia.log")
+    logger = logging.getLogger(__name__)
+    logger.info("🚀 Iniciando descarga de capítulo de hoy...")
+
+    # -------- DESCARGAS --------
+
     nine_pm_today = datetime.combine(datetime.now().date(), time(21, 30))
     while True:
         today = datetime.now()
         if today.weekday() >= 5:
-            print("Hoy es fin de semana. No hay capítulo.")
+            logger.info("Hoy es fin de semana. No hay capítulo.")
             exit(0)
         elif already_downloaded_today():
-            print("✅ El capítulo de hoy ya fue descargado.")
+            logger.info("✅ El capítulo de hoy ya fue descargado.")
             exit(0)
 
         if today < nine_pm_today:
-            print(
+            logger.info(
                 f"El capítulo de hoy aun no ha comenzado. Siguiente descarga en {nine_pm_today - today}"
             )
             difference = nine_pm_today - today
@@ -42,14 +57,7 @@ if __name__ == "__main__":
         if url is None:
             sleep_progress(120)
             continue
-
-        config = {
-            "SERIE_NAME": "desafio siglo xxi 2025",
-            "URL": url,
-            "QUALITIES": [720, 360],
-            "OUTPUT_FOLDER": Path("output"),
-        }
-        filename_template = "{serie_name_normalized}.capitulo.{number}.yt.{quality}p{ext}"  # ext debe tener el punto
+        config["URL"] = url
 
         # Crear carpetas de salida si no existen
         temp_folder = config["OUTPUT_FOLDER"] / "TEMP"
@@ -62,7 +70,7 @@ if __name__ == "__main__":
         # 2. EJECUTAR DESCARGAS EN PARALELO
         downloaded_files = {}
         with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
-            print(f"🚀 Iniciando {len(download_jobs)} descargas en paralelo...")
+            logger.info(f"🚀 Iniciando {len(download_jobs)} descargas en paralelo...")
 
             future_to_job = {
                 executor.submit(
@@ -77,15 +85,19 @@ if __name__ == "__main__":
                     filepath = future.result()
                     if job["type"] == "audio":
                         downloaded_files["audio"] = filepath
+                        logger.info(f"✔️ Audio descargado {filepath}")
                     else:
                         if "videos" not in downloaded_files:
                             downloaded_files["videos"] = {}
                         downloaded_files["videos"][job["quality"]] = filepath
+                        logger.info(f"✔️ Video descargado {filepath}")
                 except Exception as exc:
-                    print(
+                    logger.error(
                         f"Falló la descarga para {job['type']} {job['quality']}: {exc}"
                     )
 
+        # 3. MERGEAR CON FFMPEG
+        logger.info("🎉 Comenzando fusión con FFMPEG...")
         video_title = get_metadata(config["URL"])["title"]
         number = get_episode_number(video_title)
         serie_name_normalized = config["SERIE_NAME"].replace(" ", ".").lower()
@@ -101,6 +113,7 @@ if __name__ == "__main__":
             )
             output = str(config["OUTPUT_FOLDER"] / filename)
             merge_with_ffmpeg(video_path, audio_path, output)
+            logger.info(f"✔️ Archivo final: {output}")
 
         register_download(number)
 
@@ -112,7 +125,7 @@ if __name__ == "__main__":
             response = requests.get(thumbnail)
             with open(output, "wb") as f:
                 f.write(response.content)
-
+            logger.info(f"✔️ Miminiatura descargada: {output}")
         # cleanup([video_path, audio_path])
-        print("✅ Proceso completado.")
+        logger.info("✅ Proceso completado.")
         break
