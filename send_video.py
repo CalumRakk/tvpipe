@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import cast
+from typing import Union, cast
 
 from pydantic import BaseModel
 from pyrogram.types import InputMediaVideo, Message
@@ -27,6 +27,7 @@ class Video(BaseModel):
 
 
 def get_videos(video_paths: list[str]) -> list[Video]:
+    """Devuelve una lista de videos (Video)."""
     videos: list[Video] = []
     for video_path in video_paths:
         metadata = get_video_metadata(video_path)
@@ -36,10 +37,9 @@ def get_videos(video_paths: list[str]) -> list[Video]:
     return videos
 
 
-def send_videos(chat_id: int, videos: list[Video]) -> list[Message]:
-
+def send_videos(chat_id: Union[int, str], videos: list[Video]) -> list[Message]:
+    """Sube los videos a Telegram y devuelve una lista de mensajes."""
     messages = []
-    chat_id = config["chat_id"]
     for video in videos:
         progress_bar = tqdm(
             total=video.size,
@@ -68,7 +68,7 @@ def send_videos(chat_id: int, videos: list[Video]) -> list[Message]:
 
 
 def resend_videos_as_media_group(
-    chat_id: int, caption: str, messages: list[Message]
+    chat_id: Union[int, str], caption: str, messages: list[Message]
 ) -> list[Message]:
     """Reenvia los videos como un grupo de medios, con un caption personalizado."""
     media_group = []
@@ -82,33 +82,33 @@ def resend_videos_as_media_group(
     return messages
 
 
-# --- CONFIGURACIÓN ---
-config = {
-    "caption": "Capítulo 9 - Desafío Siglo XXI\n\n",
-    "videos": [
+def add_subcaption(caption: str, videos: list[Video]) -> str:
+    caption = caption
+    for video in videos:
+        caption = caption + f"{video.format_name}: {video.size_mb} MB\n"
+    return caption
+
+
+def main(chat_id: Union[int, str], caption: str, video_paths: list[str]):
+    videos = get_videos(video_paths)
+
+    caption_final = add_subcaption(caption, videos)
+    messages = resend_videos_as_media_group(
+        chat_id, caption_final, send_videos(chat_id, videos)
+    )
+    client.delete_messages(chat_id, [message.id for message in messages])  # type: ignore
+    client.stop()  # type: ignore
+
+    print("Listo")
+
+
+if __name__ == "__main__":
+    # --- CONFIGURACIÓN ---
+    caption = "Capítulo 9 - Desafío Siglo XXI\n\n"
+    video_paths = [
         r"D:\Carpetas Leo\norma\video\Sin título.mp4",
         r"D:\Carpetas Leo\norma\video\Random Videos on the Internet_2.mp4",
-    ],
-    "chat_id": "me",
-}
-
-
-videos = get_videos(config["videos"])
-
-# --- CONCATENA SUBCAPTION AL CAPTION PRINCIPAL ---
-caption = config["caption"]
-for video in videos:
-    caption = caption + f"{video.format_name}: {video.size_mb} MB\n"
-
-# --- SUBIDA VIDEOS ---
-chat_id = config["chat_id"]
-messages = send_videos(chat_id, videos)
-
-# --- GRUPO DE MEDIAS ---
-message = resend_videos_as_media_group(chat_id, caption, messages)
-
-client.delete_messages(chat_id, [message.id for message in messages])  # type: ignore
-
-client.stop()  # type: ignore
-
-print("Listo")
+    ]
+    chat_id = "me"
+    # ---------------------
+    main(chat_id=chat_id, caption=caption, video_paths=video_paths)
