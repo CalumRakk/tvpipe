@@ -106,11 +106,8 @@ def add_watermark(
     print(f"✅ Imagen final guardada como '{output_path}'")
 
 
-def main():
-    # -------- CONFIGURACIÓN --------
-    video_path = r"D:\github Leo\caracoltv-dl\output\desafio.siglo.xxi.2025.capitulo.07.yt.720p.mp4"
-    output_image = "thumbnail_watermarked.jpg"
-    watermark_text = "Visita https://t.me/eldesafio2"
+def main(video_path: str, output_image: str, watermark_text: str) -> None:
+
     font_path = (
         r"D:\github Leo\caracoltv-dl\fonts\Roboto\Roboto-VariableFont_wdth,wght.ttf"
     )
@@ -122,4 +119,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    video_path = r"D:\github Leo\caracoltv-dl\output\desafio.siglo.xxi.2025.capitulo.07.yt.720p.mp4"
+    output_image = "thumbnail_watermarked.jpg"
+    watermark_text = "Visita https://t.me/eldesafio2"
+    main(video_path, output_image, watermark_text)
