@@ -59,55 +59,59 @@ def load_registered_stream():
     return {}
 
 
-PATH_DOWNLOADED_STREAM = Path("meta/downloaded_stream.json")
-setup_logging(f"logs/{Path(__file__).stem}.log")
-logger = logging.getLogger(__name__)
+if __name__ == "__main__":
+    PATH_DOWNLOADED_STREAM = Path("meta/downloaded_stream.json")
+    setup_logging(f"logs/{Path(__file__).stem}.log")
+    logger = logging.getLogger(__name__)
 
-# --- CONFIGURACION ---
-serie_name = "desafio.siglo.xxi.2025"
-number = determine_number_episode()
-FOLDER_OUTPUT = Path(r"output/live_downloads/caracoltv")
-release_time = datetime.combine(datetime.now().date(), time(19, 55))  # 7:55 PM
-end_time = datetime.combine(datetime.now().date(), time(21, 45, 59))  # 9:45 PM
+    logger.info("Iniciando captura del stream de Caracol TV")
+    # --- CONFIGURACION ---
+    serie_name = "desafio.siglo.xxi.2025"
+    number = determine_number_episode()
+    FOLDER_OUTPUT = Path(r"output/live_downloads/caracoltv")
+    release_time = datetime.combine(datetime.now().date(), time(19, 55))  # 7:55 PM
+    end_time = datetime.combine(datetime.now().date(), time(21, 45, 59))  # 9:45 PM
 
-# --- DESCARGA ---
-caracol = CaracolLiveStream()
-FOLDER_NAME_TEMPLATE = "{serie_name}.capitulo.{number}.steam.{format_note}"
-while True:
-    today = datetime.now()
-    end_of_day = datetime.combine(today.date(), time(23, 59, 59))
+    # --- DESCARGA ---
+    caracol = CaracolLiveStream()
+    FOLDER_NAME_TEMPLATE = "{serie_name}.capitulo.{number}.steam.{format_note}"
+    while True:
+        today = datetime.now()
+        end_of_day = datetime.combine(today.date(), time(23, 59, 59))
 
-    if should_skip_today(today):
-        sleep_progress((end_of_day - today).total_seconds())
-        continue
-
-    if wait_until_release(today, release_time):
-        continue
-
-    if today > end_time:
-        logger.info("La transmision del capítulo de hoy ya ha finalizado.")
-        register_download(number)
-        sleep_progress((end_of_day - today).total_seconds())
-        continue
-
-    playlist = caracol.fetch_best_playlist(include_resolution=True)
-    format_note = playlist.format_note  # type: ignore
-    folder_name = FOLDER_NAME_TEMPLATE.format(
-        serie_name=serie_name, number=number, format_note=format_note
-    )
-    folder_output = FOLDER_OUTPUT / folder_name
-    folder_output.mkdir(parents=True, exist_ok=True)
-    for url in [url for url in cast(str, playlist.files)]:
-        parsed = urlparse(url)
-        filename = Path(parsed.path).name  # type: ignore
-
-        output = folder_output / filename
-        if output.exists():
-            logger.info("Skipping " + filename)
+        if should_skip_today(today):
+            sleep_progress((end_of_day - today).total_seconds())
             continue
 
-        logger.info("Downloading " + filename)
-        response = requests.get(url)
-        response.raise_for_status()
-        output.write_bytes(response.content)
-    sleep(20)
+        if wait_until_release(today, release_time):
+            continue
+
+        if today > end_time:
+            logger.info("La transmision del capítulo de hoy ya ha finalizado.")
+            register_download(number)
+            sleep_progress((end_of_day - today).total_seconds())
+            continue
+
+        playlist = caracol.fetch_best_playlist(include_resolution=True)
+        format_note = playlist.format_note  # type: ignore
+        folder_name = FOLDER_NAME_TEMPLATE.format(
+            serie_name=serie_name, number=number, format_note=format_note
+        )
+        folder_output = FOLDER_OUTPUT / folder_name
+        folder_output.mkdir(parents=True, exist_ok=True)
+        for url in [url for url in cast(str, playlist.files)]:
+            parsed = urlparse(url)
+            filename = Path(parsed.path).name  # type: ignore
+
+            output = folder_output / filename
+            if output.exists():
+                logger.info("Skipping " + filename)
+                continue
+
+            logger.info("Downloading " + filename)
+            response = requests.get(url)
+            response.raise_for_status()
+            output.write_bytes(response.content)
+        sleep(20)
+
+    # FIXME: Recuerda almacenar los master obtenidos que almacena supervisor ya que tiene un limite de tamaño.
