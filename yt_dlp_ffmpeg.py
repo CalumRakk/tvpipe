@@ -109,12 +109,12 @@ def main_loop(
         today = datetime.now()
         end_of_day = datetime.combine(today.date(), time(23, 59, 59))
 
-        # if should_skip_today(today):
-        #     sleep_progress((end_of_day - today).total_seconds())
-        #     continue
+        if should_skip_today(today):
+            sleep_progress((end_of_day - today).total_seconds())
+            continue
 
-        # if wait_until_release(today, release_time):
-        #     continue
+        if wait_until_release(today, release_time):
+            continue
 
         url = get_episode_of_the_day()
         if not url:
