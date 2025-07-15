@@ -22,6 +22,7 @@ from series_manager.yt_dlp_tools import (
 
 TEMPLATE_VIDEO = "{serie_name}.capitulo.{number}.yt.{quality}p{ext}"
 TEMPLATE_THUMBNAIL = "{serie_name}.capitulo.{number}.yt.thumbnail.jpg"
+logger = logging.getLogger(__name__)
 
 
 class EpisodeDownloaded(TypedDict):
@@ -32,10 +33,10 @@ class EpisodeDownloaded(TypedDict):
 def should_skip_today(today):
     """Determina si se debe omitir la descarga del capítulo hoy."""
     if today.weekday() >= 5:
-        logging.info("Hoy es fin de semana. No hay capítulo.")
+        logger.info("Hoy es fin de semana. No hay capítulo.")
         return True
     if already_downloaded_today():
-        logging.info("✅ El capítulo de hoy ya fue descargado.")
+        logger.info("✅ El capítulo de hoy ya fue descargado.")
         return True
     return False
 
@@ -44,7 +45,7 @@ def wait_until_release(today: datetime, release_time):
     """Espera hasta la hora de lanzamiento del capítulo (especificada en release_time)."""
     if today < release_time:
         difference = release_time - today
-        logging.info(f"Aún no es hora. Esperando {difference}.")
+        logger.info(f"Aún no es hora. Esperando {difference}.")
         sleep_progress(difference.total_seconds())
         return True
     return False
@@ -83,7 +84,7 @@ def merge_files(
 ) -> list[Path]:
     """Merge los archivos de video y audio descargados."""
     if "audio" not in downloaded_files or "videos" not in downloaded_files:
-        logging.error("No se encontraron archivos de audio o video para fusionar.")
+        logger.error("No se encontraron archivos de audio o video para fusionar.")
         raise ValueError("No se encontraron archivos de audio o video para fusionar.")
 
     audio_path = downloaded_files["audio"]
@@ -95,7 +96,7 @@ def merge_files(
         )
         output = output_folder / filename
         merge_with_ffmpeg(video_path, audio_path, str(output))
-        logging.info(f"Archivo final: {output}")
+        logger.info(f"Archivo final: {output}")
         finales.append(output)
     return finales
 
@@ -111,23 +112,24 @@ def download_thumbnail(url: str, output_folder: Path, serie_name: str):
         response = requests.get(thumbnail)
         with open(output, "wb") as f:
             f.write(response.content)
-        logging.info(f"Miniatura descargada: {output}")
+        logger.info(f"Miniatura descargada: {output}")
     return output
 
 
 def main_loop(
     serie_name: str, qualities: list[int], output_folder: Path, release_time: datetime
 ) -> typing.Generator[EpisodeDownloaded, None, None]:
+    logger.info("Iniciando el bucle principal de descarga del capítulo del día.")
     while True:
         today = datetime.now()
         end_of_day = datetime.combine(today.date(), time(23, 59, 59))
 
-        # if should_skip_today(today):
-        #     sleep_progress((end_of_day - today).total_seconds())
-        #     continue
+        if should_skip_today(today):
+            sleep_progress((end_of_day - today).total_seconds())
+            continue
 
-        # if wait_until_release(today, release_time):
-        #     continue
+        if wait_until_release(today, release_time):
+            continue
 
         url = get_episode_of_the_day()
         if not url:
@@ -152,7 +154,7 @@ def main_loop(
         register_download(number)
         thumbnail_path = download_thumbnail(url, output_folder, serie_name_final)
 
-        logging.info("✅ Descarga del capítulo del día completada.")
+        logger.info("✅ Descarga del capítulo del día completada.")
         yield {"videos": videos, "thumbnail": thumbnail_path}
 
 
@@ -164,5 +166,5 @@ if __name__ == "__main__":
     nine_pm_today = datetime.combine(datetime.now().date(), time(21, 30))
 
     for final_files in main_loop(serie_name, qualities, output_folder, nine_pm_today):
-        logging.info(f"Archivos finales: {final_files}")
+        logger.info(f"Archivos finales: {final_files}")
         break

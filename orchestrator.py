@@ -34,4 +34,3 @@ if __name__ == "__main__":
             forward=forward_chat_ids,
         )
         print(f"Archivos finales: {episode_dled}")
-        break
