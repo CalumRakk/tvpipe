@@ -6,7 +6,7 @@ from pathlib import Path
 import requests
 
 from logging_config import setup_logging
-from utils.yt_dlp_tools import (
+from series_manager.yt_dlp_tools import (
     already_downloaded_today,
     download_media_item,
     get_download_jobs,

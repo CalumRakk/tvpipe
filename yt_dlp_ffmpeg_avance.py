@@ -2,7 +2,7 @@ from pathlib import Path
 
 import requests
 
-from utils.yt_dlp_tools import (
+from series_manager.yt_dlp_tools import (
     download_audio,
     download_video,
     get_episode_number,

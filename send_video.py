@@ -1,13 +1,14 @@
 from pathlib import Path
+from typing import cast
 
-import cv2
-from pyrogram.enums import ParseMode
-from pyrogram.types import InputMediaVideo
+from pydantic import BaseModel
+from pyrogram.types import InputMediaVideo, Message
+
+# advertir: La orientacion de una miniatura especificada (horizontal o vertical), debe coincidir con la del video sino, la miniatura se redimensionara de forma incorrecta.
 from tqdm import tqdm  # type: ignore
 
 from get_telegram_client import client
-
-# advertir: La orientacion de una miniatura especificada (horizontal o vertical), debe coincidir con la del video sino, la miniatura se redimensionara de forma incorrecta.
+from series_manager.utils import get_video_metadata
 
 
 def progress(current, total, progress_bar: tqdm):
@@ -15,103 +16,98 @@ def progress(current, total, progress_bar: tqdm):
     progress_bar.update(current - progress_bar.n)
 
 
-def get_video_metadata(video_path: str, thumbnail_path=None) -> dict:
-    """Devuelve un diccionario con los siguientes campos:
-    {
-        "width": width,
-        "height": height,
-        "duration": duration,
-        "thumb": str(temp_folder),
-        "size_mb": size_mb
-    }
-    """
-
-    cap = cv2.VideoCapture(video_path)
-
-    if not cap.isOpened():
-        print("Error al abrir el video")
-        exit()
-
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    duration = int(total_frames / fps)
-    size = Path(video_path).stat().st_size
-    size_mb = int(size / (1024 * 1024))
-
-    cap.release()
-    return {
-        "width": width,
-        "height": height,
-        "duration": duration,
-        "size_mb": size_mb,
-        "size": size,
-        "path": video_path,
-        "format_name": "HD" if width > 720 else "SD",
-    }
+class Video(BaseModel):
+    path: str
+    duration: int
+    width: int
+    height: int
+    size: int
+    size_mb: int
+    format_name: str
 
 
-metadatas = []
-for video_path in [
-    Path(r"D:\Carpetas Leo\norma\video\Sin título.mp4"),
-    Path(r"D:\Carpetas Leo\norma\video\Random Videos on the Internet_2.mp4"),
-]:
-    metadata = get_video_metadata(str(video_path))
-    metadatas.append(metadata)
-metadatas.sort(key=lambda x: x["size"])
+def get_videos(video_paths: list[str]) -> list[Video]:
+    videos: list[Video] = []
+    for video_path in video_paths:
+        metadata = get_video_metadata(video_path)
+        videos.append(Video(**metadata))
 
-caption = f"Capítulo 9 - Desafío Siglo XXI\n\n"
-for metadata in metadatas:
-    caption = caption + f"{metadata['format_name']}: {metadata['size_mb']} MB\n"
+    videos.sort(key=lambda x: x.size)
+    return videos
 
 
-media_group = []
-messages = []
-for index, metadata in enumerate(metadatas):
-    total_size = metadata["size"]
-    progress_bar = tqdm(
-        total=total_size,
-        desc="Subiendo archivos",
-        unit="B",
-        unit_divisor=1024,
-        unit_scale=True,
-        leave=True,
-    )
+def send_videos(chat_id: int, videos: list[Video]) -> list[Message]:
 
-    video_path = metadata["path"]
-    filename = Path(video_path).name
-    duration = metadata["duration"]
-    width = metadata["width"]
-    height = metadata["height"]
+    messages = []
+    chat_id = config["chat_id"]
+    for video in videos:
+        progress_bar = tqdm(
+            total=video.size,
+            desc="Subiendo archivos",
+            unit="B",
+            unit_divisor=1024,
+            unit_scale=True,
+            leave=True,
+        )
+        filename = Path(video.path).name
+        message = client.send_video(
+            chat_id=chat_id,
+            video=video.path,
+            file_name=filename,
+            caption=filename,
+            progress=progress,
+            progress_args=(progress_bar,),
+            duration=video.duration,
+            width=video.width,
+            height=video.height,
+            thumb=r"thumbnail_watermarked.jpg",
+            disable_notification=True,
+        )
+        messages.append(message)
+    return messages
 
-    message = client.send_video(
-        chat_id="me",
-        video=video_path,
-        file_name=filename,
-        caption=filename,
-        progress=progress,
-        progress_args=(progress_bar,),
-        duration=duration,
-        width=width,
-        height=height,
-        thumb=r"thumbnail_watermarked.jpg",
-        disable_notification=True,
-    )
-    messages.append(message)
 
-for index, message in enumerate(messages):
-    file_id = message.video.file_id
-    inputmediavideo = InputMediaVideo(
-        media=file_id, caption=caption if index == 0 else ""
-    )
-    media_group.append(inputmediavideo)
+def resend_videos_as_media_group(
+    chat_id: int, caption: str, messages: list[Message]
+) -> list[Message]:
+    """Reenvia los videos como un grupo de medios, con un caption personalizado."""
+    media_group = []
+    for index, message in enumerate(messages):
+        file_id = message.video.file_id
+        inputmediavideo = InputMediaVideo(
+            media=file_id, caption=caption if index == 0 else ""
+        )
+        media_group.append(inputmediavideo)
+    messages = cast(list[Message], client.send_media_group(chat_id, media_group))
+    return messages
 
-print("Moviendo archivos al grupo espeficado")
-message = client.send_media_group("me", media_group)
 
-client.delete_messages("me", [message.id for message in messages])  # type: ignore
+# --- CONFIGURACIÓN ---
+config = {
+    "caption": "Capítulo 9 - Desafío Siglo XXI\n\n",
+    "videos": [
+        r"D:\Carpetas Leo\norma\video\Sin título.mp4",
+        r"D:\Carpetas Leo\norma\video\Random Videos on the Internet_2.mp4",
+    ],
+    "chat_id": "me",
+}
+
+
+videos = get_videos(config["videos"])
+
+# --- CONCATENA SUBCAPTION AL CAPTION PRINCIPAL ---
+caption = config["caption"]
+for video in videos:
+    caption = caption + f"{video.format_name}: {video.size_mb} MB\n"
+
+# --- SUBIDA VIDEOS ---
+chat_id = config["chat_id"]
+messages = send_videos(chat_id, videos)
+
+# --- GRUPO DE MEDIAS ---
+message = resend_videos_as_media_group(chat_id, caption, messages)
+
+client.delete_messages(chat_id, [message.id for message in messages])  # type: ignore
 
 client.stop()  # type: ignore
 
