@@ -3,7 +3,7 @@ import logging
 from os import getenv
 from pathlib import Path
 from platform import system
-from typing import Union, cast
+from typing import Optional, Sequence, Union, cast
 
 from pydantic import BaseModel
 from pyrogram import Client  # type: ignore
@@ -103,7 +103,11 @@ def send_videos(
 
 
 def resend_videos_as_media_group(
-    client: Client, chat_id: Union[int, str], caption: str, messages: list[Message]
+    client: Client,
+    chat_id: Union[int, str],
+    caption: str,
+    messages: list[Message],
+    forward: Optional[list[int]] = None,
 ) -> list[Message]:
     """Reenvia los videos como un grupo de medios, con un caption personalizado."""
     media_group = []
@@ -113,7 +117,18 @@ def resend_videos_as_media_group(
             media=file_id, caption=caption if index == 0 else ""
         )
         media_group.append(inputmediavideo)
-    messages = cast(list[Message], client.send_media_group(chat_id, media_group))
+
+    if forward is None:
+        forward_final = [chat_id]
+    else:
+        forward_final = [chat_id] + forward
+
+    messages = []
+    for forward_chat_id in forward_final:
+        logger.info(f"Reenviando videos a {forward_chat_id}")
+        messages.extend(
+            cast(list[Message], client.send_media_group(forward_chat_id, media_group))
+        )
     return messages
 
 
@@ -145,7 +160,11 @@ def get_client_started(session_name: str = "leo") -> Client:
 
 
 def main(
-    chat_id: Union[int, str], caption: str, video_paths: list[str], thumbnail_path: str
+    chat_id: Union[int, str],
+    caption: str,
+    video_paths: list[str],
+    thumbnail_path: str,
+    forward: Optional[list[int]] = None,
 ):
     logger.info("Iniciando el envío de videos a Telegram")
     videos = get_videos(video_paths)
@@ -153,7 +172,7 @@ def main(
     caption_final = add_subcaption(caption, videos)
     messages = send_videos(client, chat_id, videos, thumbnail_path)
     resend_videos_as_media_group(
-        client, chat_id, caption=caption_final, messages=messages
+        client, chat_id, caption=caption_final, messages=messages, forward=forward
     )
     client.delete_messages(chat_id, [message.id for message in messages])  # type: ignore
     client.stop()  # type: ignore
@@ -170,6 +189,7 @@ if __name__ == "__main__":
     ]
     chat_id = "me"
     thumbnail_path = "thumbnail_watermarked.jpg"
+    forward = [-1001446012480]
 
     # ---------------------
     main(
@@ -177,4 +197,5 @@ if __name__ == "__main__":
         caption=caption,
         video_paths=video_paths,
         thumbnail_path=thumbnail_path,
+        forward=forward,
     )
