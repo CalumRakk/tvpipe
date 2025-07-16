@@ -11,12 +11,12 @@ if __name__ == "__main__":
 
     # --- Configuracion de la serie y calidades ---
     serie_name = "desafio siglo xxi 2025"
-    qualities = [240, 144]
+    qualities = [720, 360]
     output_folder = Path("output")
     nine_pm_today = datetime.combine(datetime.now().date(), time(21, 30))
 
     # --- Configuracion de Telegram ---
-    caption = "Capítulo 9 - Desafío Siglo XXI\n\n"
+
     chat_id = "me"
     forward_chat_ids = [-1001446012480]
     thumbnail_output = "thumbnail_watermarked.jpg"
@@ -24,6 +24,10 @@ if __name__ == "__main__":
     for episode_dled in main_loop(serie_name, qualities, output_folder, nine_pm_today):
         videos = episode_dled["videos"]
         thumbnail_path = episode_dled["thumbnail"]
+        episode_number = episode_dled["episode_number"]
+        print(f"Descargado episodio {episode_number} de {serie_name}")
+
+        caption = f"Capítulo {episode_number} - Desafío Siglo XXI\n\n"
         video_paths = [str(file) for file in videos]
         add_watermark_to_image(str(thumbnail_path), watermark_text, thumbnail_output)
         send_video_to_telegram(

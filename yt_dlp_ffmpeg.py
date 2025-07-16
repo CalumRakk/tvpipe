@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 class EpisodeDownloaded(TypedDict):
     videos: list[Path]
     thumbnail: Path
+    episode_number: str
 
 
 def should_skip_today(today):
@@ -155,7 +156,7 @@ def main_loop(
         thumbnail_path = download_thumbnail(url, output_folder, serie_name_final)
 
         logger.info("✅ Descarga del capítulo del día completada.")
-        yield {"videos": videos, "thumbnail": thumbnail_path}
+        yield {"videos": videos, "thumbnail": thumbnail_path, "episode_number": number}
 
 
 if __name__ == "__main__":

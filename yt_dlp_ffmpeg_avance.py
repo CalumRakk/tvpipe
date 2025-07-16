@@ -13,8 +13,8 @@ from series_manager.yt_dlp_tools import (
 if __name__ == "__main__":
     config = {
         "SERIE_NAME": "desafio siglo xxi 2025",
-        "URL": "https://www.youtube.com/watch?v=707aqENykIA",
-        "QUALITIES": [720],
+        "URL": "https://www.youtube.com/watch?v=e4e6w3OA8vg",
+        "QUALITIES": [1080],
         "OUTPUT_FOLDER": Path("output"),
     }
     filename_template = "{serie_name_normalized}.capitulo.{number}.avance.yt.{quality}p{ext}"  # ext debe tener el punto
