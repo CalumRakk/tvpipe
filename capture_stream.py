@@ -3,22 +3,17 @@ import logging
 import time
 from datetime import datetime, time, timedelta
 from pathlib import Path
-from time import sleep
-from typing import cast
-from urllib.parse import urlparse
-
-import requests
 
 from config import STREAM_CAPTURE_END_TIME, STREAM_CAPTURE_START_TIME
 from logging_config import setup_logging
 from series_manager.caracolstream import CaracolLiveStream
 from series_manager.caracoltv import CaracolTV
+from series_manager.ditu import main as ditu_main_yield
 from series_manager.yt_dlp_tools import load_download_cache as load_cache_episode
 from yt_dlp_ffmpeg import RELEASE_MODE, sleep_progress, wait_until_release
 
 PATH_DOWNLOADED_STREAM = Path("meta/downloaded_stream.json")
-FOLDER_OUTPUT = Path(r"output/live_downloads/caracoltv")
-FOLDER_NAME_TEMPLATE = "{serie_name}.capitulo.{number}.steam.{format_note}"
+FOLDER_OUTPUT = Path(r"output/live_downloads/ditu")
 
 
 def should_skip_today(today):
@@ -78,7 +73,7 @@ def get_stream_capture_times(mode) -> tuple[datetime, datetime]:
         caractol = CaracolTV()
         schedule = caractol.get_schedule_desafio()
         if schedule:
-            start_time = schedule["endtime"] + timedelta(minutes=5)
+            start_time = schedule["starttime"] - timedelta(minutes=5)
             end_time = schedule["endtime"] + timedelta(minutes=5)
             return start_time, end_time
         raise ValueError("No se encontró la programación del desafío.")
@@ -111,32 +106,18 @@ if __name__ == "__main__":
             logger.info(f"Hora de lanzamiento actualizada.")
             continue
 
-        playlist = stream.fetch_best_playlist(include_resolution=True)
-        format_note = playlist.format_note  # type: ignore
-        folder_name = FOLDER_NAME_TEMPLATE.format(
-            serie_name=serie_name, number=number, format_note=format_note
-        )
+        number = determine_number_episode()
+        folder_name = f"{serie_name}.capitulo.{number}.ditu.1080p"
         folder_output = FOLDER_OUTPUT / folder_name
         folder_output.mkdir(parents=True, exist_ok=True)
-        for url in [url for url in cast(str, playlist.files)]:
-            parsed = urlparse(url)
-            filename = Path(parsed.path).name  # type: ignore
-
-            output = folder_output / filename
-            if output.exists():
-                logger.info("Skipping " + filename)
-                continue
-
-            logger.info("Downloading " + filename)
-            response = requests.get(url)
-            response.raise_for_status()
-            output.write_bytes(response.content)
-
-        logger.info(f"Capturando termina a las: {end_time.strftime('%I:%M %p')}")
-        if end_time < datetime.now():
-            register_download(number)
-            logger.info(f"✅ Capítulo {number} capturado.")
-            continue
-        sleep_progress(20)
+        for _ in ditu_main_yield(folder_output):
+            logger.info(f"Capturando termina a las: {end_time.strftime('%I:%M %p')}")
+            if (
+                end_time < datetime.now()
+                and get_stream_capture_times(mode)[1] < datetime.now()
+            ):
+                register_download(number)
+                logger.info(f"✅ Capítulo {number} capturado.")
+                break
 
     # FIXME: Recuerda almacenar los master obtenidos que almacena supervisor ya que tiene un limite de tamaño.
