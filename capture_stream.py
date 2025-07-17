@@ -6,7 +6,6 @@ from pathlib import Path
 
 from config import STREAM_CAPTURE_END_TIME, STREAM_CAPTURE_START_TIME
 from logging_config import setup_logging
-from series_manager.caracolstream import CaracolLiveStream
 from series_manager.caracoltv import CaracolTV
 from series_manager.ditu import main as ditu_main_yield
 from series_manager.yt_dlp_tools import load_download_cache as load_cache_episode
@@ -87,11 +86,9 @@ if __name__ == "__main__":
 
     # --- CONFIGURACION ---
     serie_name = "desafio.siglo.xxi.2025"
-    number = determine_number_episode()
     mode = RELEASE_MODE.AUTO
 
     start_time, end_time = get_stream_capture_times(mode)
-    stream = CaracolLiveStream()
     while True:
         logger.info(f"Capturando empieza a las: {start_time.strftime('%I:%M %p')}")
 
