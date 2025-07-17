@@ -1,4 +1,5 @@
 import concurrent.futures
+import enum
 import logging
 import typing
 from datetime import datetime, time, timedelta
@@ -7,7 +8,9 @@ from typing import TypedDict
 
 import requests
 
+from config import YOUTUBE_RELEASE_TIME
 from logging_config import setup_logging
+from series_manager.caracoltv import CaracolTV
 from series_manager.yt_dlp_tools import (
     already_downloaded_today,
     download_media_item,
@@ -19,6 +22,12 @@ from series_manager.yt_dlp_tools import (
     register_download,
     sleep_progress,
 )
+
+
+class RELEASE_MODE(enum.Enum):
+    AUTO = "auto"
+    MANUAL = "manual"
+
 
 TEMPLATE_VIDEO = "{serie_name}.capitulo.{number}.yt.{quality}p{ext}"
 TEMPLATE_THUMBNAIL = "{serie_name}.capitulo.{number}.yt.thumbnail.jpg"
@@ -46,7 +55,6 @@ def wait_until_release(today: datetime, release_time):
     """Espera hasta la hora de lanzamiento del capítulo (especificada en release_time)."""
     if today < release_time:
         difference = release_time - today
-        logger.info(f"Aún no es hora. Esperando {difference}.")
         sleep_progress(difference.total_seconds())
         return True
     return False
@@ -117,19 +125,43 @@ def download_thumbnail(url: str, output_folder: Path, serie_name: str):
     return output
 
 
+def get_release_time(mode) -> datetime:
+    # Si se usa el modo "auto", se obtiene la hora de lanzamiento del desafío.
+    # Si no, se usa una hora fija.
+    # Por defecto, se establece a las 21:30 del día actual.
+    release_time = datetime.combine(datetime.now().date(), YOUTUBE_RELEASE_TIME)
+    if mode == RELEASE_MODE.AUTO:
+        caractol = CaracolTV()
+        schedule = caractol.get_schedule_desafio()
+        if schedule:
+            release_time = schedule["endtime"] + timedelta(minutes=5)
+            return release_time
+        raise ValueError("No se encontró la programación del desafío.")
+    return release_time
+
+
 def main_loop(
-    serie_name: str, qualities: list[int], output_folder: Path, release_time: datetime
+    serie_name: str,
+    qualities: list[int],
+    output_folder: Path,
+    mode: RELEASE_MODE,
 ) -> typing.Generator[EpisodeDownloaded, None, None]:
     logger.info("Iniciando el bucle principal de descarga del capítulo del día.")
+    release_time = get_release_time(mode)
     while True:
-        today = datetime.now()
-        end_of_day = datetime.combine(today.date(), time(23, 59, 59))
+        logger.info(f"Hora de lanzamiento: {release_time.strftime('%I:%M %p')}")
 
+        today = datetime.now()
         if should_skip_today(today):
+            end_of_day = datetime.combine(today.date(), time(23, 59, 59))
             sleep_progress((end_of_day - today).total_seconds())
             continue
 
-        if wait_until_release(today, release_time):
+        if wait_until_release(today, release_time) and mode is RELEASE_MODE.AUTO:
+            # Una vez de la primera espera se vuelve a calcular la hora de lanzamiento.
+            # para casos donde la programacion pueda cambiar.
+            release_time = get_release_time(mode)
+            logger.info(f"Hora de lanzamiento actualizada.")
             continue
 
         url = get_episode_of_the_day()
@@ -164,8 +196,8 @@ if __name__ == "__main__":
     serie_name = "desafio siglo xxi 2025"
     qualities = [240]
     output_folder = Path("output")
-    nine_pm_today = datetime.combine(datetime.now().date(), time(21, 30))
+    mode = RELEASE_MODE.MANUAL
 
-    for final_files in main_loop(serie_name, qualities, output_folder, nine_pm_today):
+    for final_files in main_loop(serie_name, qualities, output_folder, mode):
         logger.info(f"Archivos finales: {final_files}")
         break

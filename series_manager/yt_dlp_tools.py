@@ -13,22 +13,11 @@ from typing import Optional, cast
 import yt_dlp
 from PIL import Image
 
-PATH_DOWNLOAD_CACHE = Path("meta/downloaded.log")
+PATH_DOWNLOAD_CACHE = Path("meta/downloaded_episode_releases.json")
 MEMORY = {}
-CACHE_FILE = Path("meta/metadata_cache.json")
+CACHE_FILE = Path("meta/urls_cache.json")
 CACHE = {}
 logger = logging.getLogger(__name__)
-
-
-def load_download_cache() -> dict[str, str]:
-    """Carga el cache de los capitulos descargados del día."""
-    if not PATH_DOWNLOAD_CACHE.exists():
-        return {}
-    with open(PATH_DOWNLOAD_CACHE, "r") as f:
-        # ejemplo de dict : {"2023-10-01": "capitulo 09", "2023-10-02": "capitulo 02"}
-        return {
-            line.split(":")[0]: line.split(":")[1].strip() for line in f.readlines()
-        }
 
 
 def get_episode_of_the_day() -> Optional[str]:
@@ -189,6 +178,8 @@ def cleanup(paths: list[str]) -> None:
 
 
 def sleep_progress(seconds):
+    if seconds <= 0:
+        return
     minutes = int(timedelta(seconds=seconds).total_seconds() // 60)
 
     logger.info(f"Esperando {minutes} minutos antes de continuar...")
@@ -276,12 +267,25 @@ def already_downloaded_today():
 
 def register_download(number):
     # FIXME: si se prueba el código asegurate de eliminar el registro del dia. Sino el main_loop podria pensar que ya se ha descargado el episodio del dia.
-    today = datetime.now().strftime("%Y-%m-%d")
-    with open(PATH_DOWNLOAD_CACHE, "a") as f:
-        f.write(f"{today}: capitulo {number}\n")
+    today = datetime.now().date()
+    if PATH_DOWNLOAD_CACHE.exists():
+        data = json.loads(PATH_DOWNLOAD_CACHE.read_text())
+        data[today] = f"capitulo {number}"
+        PATH_DOWNLOAD_CACHE.write_text(json.dumps(data))
+        return
+    else:
+        PATH_DOWNLOAD_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        data = {str(today): f"capitulo {number}"}
+        PATH_DOWNLOAD_CACHE.write_text(json.dumps(data))
 
 
-def load_cache():
+def load_download_cache() -> dict[str, str]:
+    if not PATH_DOWNLOAD_CACHE.exists():
+        return {}
+    return json.loads(PATH_DOWNLOAD_CACHE.read_text())
+
+
+def load_url_cache():
     global CACHE
     if CACHE_FILE.exists():
         with open(CACHE_FILE, "r") as f:
@@ -290,13 +294,13 @@ def load_cache():
         CACHE = {}
 
 
-def save_cache():
+def save_url_cache():
     with open(CACHE_FILE, "w") as f:
         json.dump(CACHE, f, indent=2)
 
 
 def get_metadata(url: str) -> dict:
-    load_cache()
+    load_url_cache()
     now = datetime.now()
 
     entry = CACHE.get(url)
@@ -311,7 +315,7 @@ def get_metadata(url: str) -> dict:
 
     # Actualizar cache
     CACHE[url] = {"timestamp": now.isoformat(), "info": info_dict}
-    save_cache()
+    save_url_cache()
     return info_dict
 
 

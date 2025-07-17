@@ -1,10 +1,10 @@
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from create_thumbnail_with_watermaker import add_watermark_to_image
 from logging_config import setup_logging
 from send_video import main as send_video_to_telegram
-from yt_dlp_ffmpeg import main_loop
+from yt_dlp_ffmpeg import RELEASE_MODE, main_loop
 
 if __name__ == "__main__":
     setup_logging(f"logs/{Path(__file__).stem}.log")
@@ -13,15 +13,14 @@ if __name__ == "__main__":
     serie_name = "desafio siglo xxi 2025"
     qualities = [720, 360]
     output_folder = Path("output")
-    nine_pm_today = datetime.combine(datetime.now().date(), time(21, 30))
+    mode = RELEASE_MODE.AUTO
 
     # --- Configuracion de Telegram ---
-
     chat_id = "me"
     forward_chat_ids = [-1001446012480]
     thumbnail_output = "thumbnail_watermarked.jpg"
     watermark_text = "Visita https://t.me/eldesafio2"
-    for episode_dled in main_loop(serie_name, qualities, output_folder, nine_pm_today):
+    for episode_dled in main_loop(serie_name, qualities, output_folder, mode):
         videos = episode_dled["videos"]
         thumbnail_path = episode_dled["thumbnail"]
         episode_number = episode_dled["episode_number"]

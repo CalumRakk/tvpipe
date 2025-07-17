@@ -9,10 +9,16 @@ from urllib.parse import urlparse
 
 import requests
 
+from config import STREAM_CAPTURE_END_TIME, STREAM_CAPTURE_START_TIME
 from logging_config import setup_logging
 from series_manager.caracolstream import CaracolLiveStream
+from series_manager.caracoltv import CaracolTV
 from series_manager.yt_dlp_tools import load_download_cache as load_cache_episode
-from yt_dlp_ffmpeg import sleep_progress, wait_until_release
+from yt_dlp_ffmpeg import RELEASE_MODE, sleep_progress, wait_until_release
+
+PATH_DOWNLOADED_STREAM = Path("meta/downloaded_stream.json")
+FOLDER_OUTPUT = Path(r"output/live_downloads/caracoltv")
+FOLDER_NAME_TEMPLATE = "{serie_name}.capitulo.{number}.steam.{format_note}"
 
 
 def should_skip_today(today):
@@ -59,40 +65,53 @@ def load_registered_stream():
     return {}
 
 
+def get_stream_capture_times(mode) -> tuple[datetime, datetime]:
+    """Obtiene la hora de inicio y fin de la captura del stream.
+
+    returns:
+        datetime: Hora de inicio de la captura del stream.
+        datetime: Hora de fin de la captura del stream.
+    """
+    start_time = datetime.combine(datetime.now().date(), STREAM_CAPTURE_START_TIME)
+    end_time = datetime.combine(datetime.now().date(), STREAM_CAPTURE_END_TIME)
+    if mode == RELEASE_MODE.AUTO:
+        caractol = CaracolTV()
+        schedule = caractol.get_schedule_desafio()
+        if schedule:
+            start_time = schedule["endtime"] + timedelta(minutes=5)
+            end_time = schedule["endtime"] + timedelta(minutes=5)
+            return start_time, end_time
+        raise ValueError("No se encontró la programación del desafío.")
+    return start_time, end_time
+
+
 if __name__ == "__main__":
-    PATH_DOWNLOADED_STREAM = Path("meta/downloaded_stream.json")
     setup_logging(f"logs/{Path(__file__).stem}.log")
     logger = logging.getLogger(__name__)
-
     logger.info("Iniciando captura del stream de Caracol TV")
+
     # --- CONFIGURACION ---
     serie_name = "desafio.siglo.xxi.2025"
     number = determine_number_episode()
-    FOLDER_OUTPUT = Path(r"output/live_downloads/caracoltv")
-    release_time = datetime.combine(datetime.now().date(), time(19, 55))  # 7:55 PM
-    end_time = datetime.combine(datetime.now().date(), time(21, 45, 59))  # 9:45 PM
+    mode = RELEASE_MODE.AUTO
 
-    # --- DESCARGA ---
-    caracol = CaracolLiveStream()
-    FOLDER_NAME_TEMPLATE = "{serie_name}.capitulo.{number}.steam.{format_note}"
+    start_time, end_time = get_stream_capture_times(mode)
+    stream = CaracolLiveStream()
     while True:
+        logger.info(f"Capturando empieza a las: {start_time.strftime('%I:%M %p')}")
+
         today = datetime.now()
-        end_of_day = datetime.combine(today.date(), time(23, 59, 59))
-
         if should_skip_today(today):
+            end_of_day = datetime.combine(today.date(), time(23, 59, 59))
             sleep_progress((end_of_day - today).total_seconds())
             continue
 
-        if wait_until_release(today, release_time):
+        if wait_until_release(today, start_time) and mode is RELEASE_MODE.AUTO:
+            start_time, end_time = get_stream_capture_times(mode)
+            logger.info(f"Hora de lanzamiento actualizada.")
             continue
 
-        if today > end_time:
-            logger.info("La transmision del capítulo de hoy ya ha finalizado.")
-            register_download(number)
-            sleep_progress((end_of_day - today).total_seconds())
-            continue
-
-        playlist = caracol.fetch_best_playlist(include_resolution=True)
+        playlist = stream.fetch_best_playlist(include_resolution=True)
         format_note = playlist.format_note  # type: ignore
         folder_name = FOLDER_NAME_TEMPLATE.format(
             serie_name=serie_name, number=number, format_note=format_note
@@ -112,6 +131,12 @@ if __name__ == "__main__":
             response = requests.get(url)
             response.raise_for_status()
             output.write_bytes(response.content)
-        sleep(20)
+
+        logger.info(f"Capturando termina a las: {end_time.strftime('%I:%M %p')}")
+        if end_time < datetime.now():
+            register_download(number)
+            logger.info(f"✅ Capítulo {number} capturado.")
+            continue
+        sleep_progress(20)
 
     # FIXME: Recuerda almacenar los master obtenidos que almacena supervisor ya que tiene un limite de tamaño.

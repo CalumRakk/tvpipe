@@ -1,6 +1,25 @@
+import json
+import logging
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import cv2
+
+logger = logging.getLogger(__name__)
+
+
+def load_stream_delay():
+
+    path = Path("meta/stream_delay.json")
+    if not path.exists():
+        return timedelta(0)
+    try:
+        data = json.loads(path.read_text())
+        if data["date"] == datetime.now().strftime("%Y-%m-%d"):
+            return timedelta(minutes=int(data.get("delay_minutes", 0)))
+    except Exception as e:
+        logger.warning(f"No se pudo leer el retraso: {e}")
+    return timedelta(0)
 
 
 def get_video_metadata(video_path: str) -> dict:
