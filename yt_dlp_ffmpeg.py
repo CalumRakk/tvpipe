@@ -184,19 +184,21 @@ def main_loop(
             serie_name_final,
             number,
         )
-        register_download(number)
+
         thumbnail_path = download_thumbnail(url, output_folder, serie_name_final)
 
         logger.info("✅ Descarga del capítulo del día completada.")
         yield {"videos": videos, "thumbnail": thumbnail_path, "episode_number": number}
 
+        register_download(number)
+
 
 if __name__ == "__main__":
     setup_logging(f"logs/{Path(__file__).stem}.log")
     serie_name = "desafio siglo xxi 2025"
-    qualities = [240]
+    qualities = [720, 360]
     output_folder = Path("output")
-    mode = RELEASE_MODE.MANUAL
+    mode = RELEASE_MODE.AUTO
 
     for final_files in main_loop(serie_name, qualities, output_folder, mode):
         logger.info(f"Archivos finales: {final_files}")

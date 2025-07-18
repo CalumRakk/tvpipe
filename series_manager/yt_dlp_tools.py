@@ -270,7 +270,7 @@ def register_download(number):
     today = datetime.now().date()
     if PATH_DOWNLOAD_CACHE.exists():
         data = json.loads(PATH_DOWNLOAD_CACHE.read_text())
-        data[today] = f"capitulo {number}"
+        data[str(today)] = f"capitulo {number}"
         PATH_DOWNLOAD_CACHE.write_text(json.dumps(data))
         return
     else:

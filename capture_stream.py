@@ -104,7 +104,7 @@ if __name__ == "__main__":
             continue
 
         number = determine_number_episode()
-        folder_name = f"{serie_name}.capitulo.{number}.ditu.1080p"
+        folder_name = f"{serie_name}.capitulo.{number}.ditu.1080p"  #
         folder_output = FOLDER_OUTPUT / folder_name
         folder_output.mkdir(parents=True, exist_ok=True)
         for _ in ditu_main_yield(folder_output):
