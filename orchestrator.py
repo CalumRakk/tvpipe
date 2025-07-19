@@ -17,9 +17,9 @@ if __name__ == "__main__":
 
     # --- Configuracion de Telegram ---
     chat_id = "me"
-    forward_chat_ids = [-1001446012480]
+    forward_chat_ids = [-1002787995122, -1002801271081]
     thumbnail_output = "thumbnail_watermarked.jpg"
-    watermark_text = "Visita https://t.me/eldesafio2"
+    watermark_text = "Visita https://t.me/eldesafio3"
     for episode_dled in main_loop(serie_name, qualities, output_folder, mode):
         videos = episode_dled["videos"]
         thumbnail_path = episode_dled["thumbnail"]

@@ -82,7 +82,9 @@ def get_best_video_format(url, target_height: int) -> str:
     candidates = [
         i
         for i in formats
-        if i.get("height") == target_height and i.get("audio_ext", "") == "none"
+        if i.get("height") == target_height
+        and i.get("audio_ext", "") == "none"
+        and i["ext"] in ["mp4", "mkv"]
     ]
     if not candidates:
         raise Exception(
@@ -255,33 +257,30 @@ def get_download_jobs(url: str, qualities: list[int]):
 
 
 def already_downloaded_today():
-    today = datetime.now().strftime("%Y-%m-%d")
-    if not PATH_DOWNLOAD_CACHE.exists():
-        return False
-    with open(PATH_DOWNLOAD_CACHE, "r") as f:
-        for line in f:
-            if today in line:
-                return True
-    return False
+    downloads = load_download_cache()
+    today = str(datetime.now().date())
+    for download in downloads:
+        if today in download.keys():
+            return True
 
 
-def register_download(number):
+def register_download(number: str):
     # FIXME: si se prueba el código asegurate de eliminar el registro del dia. Sino el main_loop podria pensar que ya se ha descargado el episodio del dia.
-    today = datetime.now().date()
+    today = str(datetime.now().date())
     if PATH_DOWNLOAD_CACHE.exists():
-        data = json.loads(PATH_DOWNLOAD_CACHE.read_text())
-        data[str(today)] = f"capitulo {number}"
-        PATH_DOWNLOAD_CACHE.write_text(json.dumps(data))
+        downloads = json.loads(PATH_DOWNLOAD_CACHE.read_text())
+        downloads.append({today: str(number)})
+        PATH_DOWNLOAD_CACHE.write_text(json.dumps(downloads))
         return
     else:
         PATH_DOWNLOAD_CACHE.parent.mkdir(parents=True, exist_ok=True)
-        data = {str(today): f"capitulo {number}"}
+        data = [{today: str(number)}]
         PATH_DOWNLOAD_CACHE.write_text(json.dumps(data))
 
 
-def load_download_cache() -> dict[str, str]:
+def load_download_cache() -> list[dict]:
     if not PATH_DOWNLOAD_CACHE.exists():
-        return {}
+        return []
     return json.loads(PATH_DOWNLOAD_CACHE.read_text())
 
 
@@ -372,3 +371,11 @@ def resize_and_compress_image(
                 "No se pudo reducir más la calidad para alcanzar el tamaño deseado."
             )
             break
+
+
+def is_episode_downloaded(ep_number: str) -> bool:
+    downloads = load_download_cache()
+    for download in downloads:
+        if ep_number in download.values():
+            return True
+    return False
