@@ -14,12 +14,14 @@ Este módulo es clave para construir combinaciones óptimas de descarga.
 """
 
 import re
-from typing import Union, get_args
+from pathlib import Path
+from typing import Optional, Tuple, Union, get_args
 
 from proyect_x.yt_downloader.schemas import (
     KLABEL_MAP,
     YOUTUBE_AUDIO_CODECS,
     YOUTUBE_VIDEO_CODECS,
+    DownloadJobResult,
     KLabel,
     QualityAlias,
 )
@@ -155,3 +157,21 @@ def get_best_video_combinations(
         for audio_fmt in audio_formats:
             combinations.append((video_fmt["format_id"], audio_fmt["format_id"]))
     return combinations
+
+
+def extract_files_from_download_result(
+    download_result: DownloadJobResult,
+) -> Tuple[Optional[Path], Optional[Path], Optional[int]]:
+    video = None
+    audio = None
+    quality_height = None
+    for formatsimple in download_result["ytdlp_response"]["requested_downloads"][0][
+        "requested_formats"
+    ]:
+        if get_format_type(formatsimple) == "video":
+            video = Path(formatsimple["filepath"]).resolve()
+            quality_height = formatsimple["height"]
+
+        elif get_format_type(formatsimple) == "audio":
+            audio = Path(formatsimple["filepath"]).resolve()
+    return (video, audio, quality_height)

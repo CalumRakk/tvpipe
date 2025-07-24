@@ -73,18 +73,6 @@ def cleanup(paths: list[str]) -> None:
             os.remove(path)
 
 
-def sleep_progress(seconds):
-    if seconds <= 0:
-        return
-    minutes = int(seconds) // 60
-    logger.info(f"Esperando {minutes} minutos antes de continuar...")
-    for i in range(int(seconds), 0, -1):
-        sleep(1)
-        if i % 60 == 0:
-            minutes -= 1
-            logger.info(f"Esperando {minutes} minutos antes de continuar...")
-
-
 def my_progress_hook(d):
     path = Path(d.get("filename"))
     if d["status"] == "downloading":

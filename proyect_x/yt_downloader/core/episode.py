@@ -16,15 +16,18 @@ Este módulo ayuda a automatizar la lógica de lanzamientos periódicos.
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 from typing import Optional, cast
+
+from proyect_x.yt_downloader.core.common import sleep_progress
+from proyect_x.yt_downloader.schemas import RELEASE_MODE
 
 from .metadata import get_metadata
 
 logger = logging.getLogger(__name__)
 
-DAILY_EPISODE_LOG_PATH = Path("meta/downloaded_episode_releases.json")
+# DAILY_EPISODE_LOG_PATH = Path("meta/downloaded_episode_releases.json")
 
 
 def get_episode_of_the_day() -> Optional[str]:
@@ -65,30 +68,30 @@ def get_episode_number(string: str) -> str:
     raise Exception("No se encontró el número de episodio.")
 
 
-def already_downloaded_today() -> bool:
-    downloads = load_download_cache()
-    today = str(datetime.now().date())
-    return any(today in d for d in downloads)
+# def already_downloaded_today() -> bool:
+#     downloads = load_download_cache()
+#     today = str(datetime.now().date())
+#     return any(today in d for d in downloads)
 
 
-def register_download(number: str):
-    today = str(datetime.now().date())
-    if DAILY_EPISODE_LOG_PATH.exists():
-        downloads = json.loads(DAILY_EPISODE_LOG_PATH.read_text())
-        downloads.append({today: str(number)})
-        DAILY_EPISODE_LOG_PATH.write_text(json.dumps(downloads))
-    else:
-        DAILY_EPISODE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        data = [{today: str(number)}]
-        DAILY_EPISODE_LOG_PATH.write_text(json.dumps(data))
+# def register_download(number: str):
+#     today = str(datetime.now().date())
+#     if DAILY_EPISODE_LOG_PATH.exists():
+#         downloads = json.loads(DAILY_EPISODE_LOG_PATH.read_text())
+#         downloads.append({today: str(number)})
+#         DAILY_EPISODE_LOG_PATH.write_text(json.dumps(downloads))
+#     else:
+#         DAILY_EPISODE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+#         data = [{today: str(number)}]
+#         DAILY_EPISODE_LOG_PATH.write_text(json.dumps(data))
 
 
-def load_download_cache() -> list[dict]:
-    if not DAILY_EPISODE_LOG_PATH.exists():
-        return []
-    return json.loads(DAILY_EPISODE_LOG_PATH.read_text())
+# def load_download_cache() -> list[dict]:
+#     if not DAILY_EPISODE_LOG_PATH.exists():
+#         return []
+#     return json.loads(DAILY_EPISODE_LOG_PATH.read_text())
 
 
-def is_episode_downloaded(ep_number: str) -> bool:
-    downloads = load_download_cache()
-    return any(ep_number in d.values() for d in downloads)
+# def is_episode_downloaded(ep_number: str) -> bool:
+#     downloads = load_download_cache()
+#     return any(ep_number in d.values() for d in downloads)

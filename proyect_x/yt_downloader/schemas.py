@@ -1,6 +1,8 @@
+import enum
 from pathlib import Path
 from typing import List, Literal, Optional, Sequence, TypedDict, Union
 
+from pydantic import BaseModel
 from typing_extensions import NotRequired
 
 QualityAlias = Literal["best", "medium", "low"]
@@ -178,3 +180,15 @@ class MainLoopResult(TypedDict):
     videos: list[Path]
     thumbnail: Path
     episode_number: str
+
+
+class RELEASE_MODE(enum.Enum):
+    AUTO = "auto"
+    MANUAL = "manual"
+
+
+class DownloadResult(BaseModel):
+    episode_number: str
+    output_paths: list[Path]
+    duration: float
+    was_skipped: bool
