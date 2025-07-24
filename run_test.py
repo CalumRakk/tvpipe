@@ -8,7 +8,7 @@ from proyect_x.yt_downloader.runner import RELEASE_MODE, main_loop
 if __name__ == "__main__":
     setup_logging(f"logs/{Path(__file__).stem}.log")
     logger = logging.getLogger(__name__)
-    config = get_settings()
+    config = get_settings(env_path=Path(".env.test"))
 
     for final_files in main_loop(config):
         logger.info(f"Archivos finales: {final_files}")

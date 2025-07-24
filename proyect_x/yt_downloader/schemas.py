@@ -9,6 +9,9 @@ QualityAlias = Literal["best", "medium", "low"]
 KLabel = Literal[
     "2k", "4k", "5k", "6k", "8k"
 ]  # Resoluciones típicas en YouTube para etiquetas "k"
+QUALITY = Union[QualityAlias, KLabel, int, str]
+
+
 KLABEL_MAP = {
     "2k": 2560,
     "4k": 3840,
@@ -29,8 +32,6 @@ YOUTUBE_AUDIO_CODECS = {
     "vorbis",  # Vorbis (raro, usado en algunos videos viejos o bajos)
     "mp3",  # MP3 (extremadamente raro, pero técnicamente posible)
 }
-
-QUALITY = Union[QualityAlias, KLabel, int, str]
 
 
 class DownloadJob(TypedDict):

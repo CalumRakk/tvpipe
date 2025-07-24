@@ -2,9 +2,15 @@ import os
 from datetime import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal, get_args
 
-from pydantic import Field, ValidationError, computed_field, model_validator
+from pydantic import (
+    Field,
+    ValidationError,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from proyect_x.yt_downloader.schemas import QUALITY, RELEASE_MODE
@@ -27,7 +33,18 @@ class AppSettings(BaseSettings):
     end_hour: time = Field(default=time(23, 0))
 
     # Lista de calidades a descargar
-    qualities: list[QUALITY] = Field(default_factory=lambda: ["low"])
+    qualities: str = Field(default="best, 360")
+
+    @field_validator("qualities", mode="after")
+    @classmethod
+    def validate_qualities(cls, values: str):
+        if "," in values:
+            parsed = []
+            for value in values.split(","):
+                parsed.append(value.strip().lower())
+            return parsed
+        else:
+            return [values]
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
