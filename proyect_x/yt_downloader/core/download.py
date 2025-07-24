@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 
 def download_audio(config) -> str:
     url = config["URL"]
-    output_folder = config["OUTPUT_FOLDER"] / "TEMP"
-    output = f"{output_folder}/channel_id=%(channel_id)s&video_id=%(id)s&format_id=%(format_id)s.%(ext)s"
+    download_folder = config["download_folder"] / "TEMP"
+    output = f"{download_folder}/channel_id=%(channel_id)s&video_id=%(id)s&format_id=%(format_id)s.%(ext)s"
     ydl_opts_audio = {"format": "bestaudio", "outtmpl": output, "continue_dl": True}
 
     with yt_dlp.YoutubeDL(ydl_opts_audio) as ydl:
@@ -56,9 +56,7 @@ def merge_with_ffmpeg(
         "-c:v",
         "copy",
         "-c:a",
-        "aac",
-        "-strict",
-        "experimental",
+        "copy",
         "-shortest",
         str(output),
     ]

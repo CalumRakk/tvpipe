@@ -22,21 +22,21 @@ def should_skip_today():
     return False
 
 
-def wait_until_release(mode):
+def wait_until_release(config):
     """Espera hasta la hora de lanzamiento del capítulo (especificada en release_time)."""
-    release_time = get_release_time(mode)
+    release_time = get_release_time(config)
     today = datetime.now()
     if today < release_time:
         return True
     return False
 
 
-def get_release_time(mode) -> datetime:
+def get_release_time(config) -> datetime:
     # Si se usa el modo "auto", se obtiene la hora de lanzamiento del desafío.
     # Si no, se usa una hora fija.
     # Por defecto, se establece a las 21:30 del día actual.
     release_time = None
-    if mode == RELEASE_MODE.AUTO:
+    if config.mode == RELEASE_MODE.AUTO:
         caractol = CaracolTV()
         schedule = caractol.get_schedule_desafio()
         if schedule:
@@ -44,8 +44,7 @@ def get_release_time(mode) -> datetime:
             return release_time
         raise ValueError("No se encontró la programación del desafío.")
     else:
-        release_time = datetime.combine(datetime.now().date(), YOUTUBE_RELEASE_TIME)  # type: ignore
-        pass  # FIXME: Corregir
+        release_time = datetime.combine(datetime.now().date(), config.release_hour)
     return release_time
 
 
@@ -66,17 +65,17 @@ def wait_release(mode):
     return False
 
 
-def get_episode_url(mode: RELEASE_MODE) -> str:
+def get_episode_url(config) -> str:
     url = None
     while url is None:
         if should_skip_today():
             wait_end_of_day()
             continue
 
-        if wait_until_release(mode) and mode is RELEASE_MODE.AUTO:
+        if wait_until_release(config) and config.mode is RELEASE_MODE.AUTO:
             # Si mode está en auto, al finalizar la espera del lanzamiento,
             # se vuelve a obtener la hora de lanzamiento para casos donde la programación pueda cambiar.
-            wait_release(mode)
+            wait_release(config.mode)
             continue
 
         url = get_episode_of_the_day()

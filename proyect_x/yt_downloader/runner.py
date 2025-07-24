@@ -22,7 +22,7 @@ def main_loop(
 ) -> Generator[dict, None, None]:
     logger.info("Iniciando el bucle principal de descarga del capítulo del día.")
     while True:
-        episode = get_episode_url(config.mode)
+        episode = get_episode_url(config)
         formats = prepare_formats(episode, config)
         downloads = parallel_downloads(formats, config)
         yield postprocess_and_register(episode, downloads, config)

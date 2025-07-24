@@ -27,10 +27,11 @@ class AppSettings(BaseSettings):
     serie_name: str = Field(default="desafio siglo xxi 2025")
     download_folder: Path = Field(default=Path("output/"))
     skip_weekends: bool = Field(default=True)
+    output_as_mp4: bool = Field(default=True)
 
     # Horarios para modo manual
     release_hour: time = Field(default=time(21, 30))
-    end_hour: time = Field(default=time(23, 0))
+    # end_hour: time = Field(default=time(23, 0))
 
     # Lista de calidades a descargar
     qualities: str = Field(default="best, 360")
@@ -56,19 +57,19 @@ class AppSettings(BaseSettings):
         """
         return self.serie_name.strip().replace(" ", ".").replace("/", "-").lower()
 
-    @model_validator(mode="after")
-    def validate_time_range(self) -> "AppSettings":
-        if self.mode == "manual" and self.release_hour >= self.end_hour:
-            raise ValueError("En modo manual, release_hour debe ser menor que end_hour")
-        elif self.mode == "manual" and self.release_hour == self.end_hour:
-            raise ValueError(
-                "En modo manual, release_hour y end_hour deben ser diferentes"
-            )
-        elif self.mode == "auto" and self.end_hour < self.release_hour:
-            raise ValueError(
-                "En modo automático, end_hour debe ser mayor que release_hour"
-            )
-        return self
+    # @model_validator(mode="after")
+    # def validate_time_range(self) -> "AppSettings":
+    #     if self.mode == "manual" and self.release_hour >= self.end_hour:
+    #         raise ValueError("En modo manual, release_hour debe ser menor que end_hour")
+    #     elif self.mode == "manual" and self.release_hour == self.end_hour:
+    #         raise ValueError(
+    #             "En modo manual, release_hour y end_hour deben ser diferentes"
+    #         )
+    #     elif self.mode == "auto" and self.end_hour < self.release_hour:
+    #         raise ValueError(
+    #             "En modo automático, end_hour debe ser mayor que release_hour"
+    #         )
+    #     return self
 
 
 @lru_cache()

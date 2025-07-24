@@ -45,13 +45,13 @@ def get_download_jobs(
     return download_jobs
 
 
-def download_media_item(job: DownloadJob, output_folder: Path) -> dict:
+def download_media_item(job: DownloadJob, download_folder: Path) -> dict:
     """
     Descarga un único item (video o audio) usando un format_id específico.
     Esta función está diseñada para ser ejecutada en un proceso separado.
     Retorna el path del archivo descargado o lanza un error descriptivo.
     """
-    output_template = f"{output_folder}/%(id)s_%(format_id)s_%(resolution)s.%(ext)s"
+    output_template = f"{download_folder}/%(id)s_%(format_id)s_%(resolution)s.%(ext)s"
     url = job["url"]
     format_id = "/".join(f"{i[0]}+{i[1]}" for i in job["combinations"])
 
