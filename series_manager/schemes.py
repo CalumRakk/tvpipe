@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List, Literal, Optional, Sequence, TypedDict, Union
 
 from typing_extensions import NotRequired
@@ -171,3 +172,9 @@ class YtDlpResponse(TypedDict):
 class DownloadJobResult(TypedDict):
     download_job: DownloadJob
     ytdlp_response: YtDlpResponse
+
+
+class MainLoopResult(TypedDict):
+    videos: list[Path]
+    thumbnail: Path
+    episode_number: str

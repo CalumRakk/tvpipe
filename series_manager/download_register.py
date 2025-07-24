@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional, TypedDict, Union, get_args
@@ -7,6 +8,7 @@ from series_manager.schemes import QUALITY
 
 SOURCES = Literal["caracol", "ditu", "youtube"]
 METHOD_TYPE = Literal["download", "stream_capture"]
+logger = logging.getLogger(__name__)
 
 
 class EpisodeDownloaded(TypedDict):
@@ -15,7 +17,7 @@ class EpisodeDownloaded(TypedDict):
     method: str
     quality: QUALITY
     datetime: str
-    filename: Optional[str]
+    path: str
 
 
 class DownloadRegistry:
@@ -29,14 +31,16 @@ class DownloadRegistry:
 
     def _load_or_initialize(self, series_title: str) -> dict:
         if self.filepath.exists():
-            with open(self.filepath, "r", encoding="utf-8") as f:
-                return json.load(f)
-        else:
-            return {
-                "series_title": series_title,
-                "last_episode_downloaded": 0,
-                "downloads": [],
-            }
+            try:
+                with open(self.filepath, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except json.JSONDecodeError as e:
+                logger.warning(f"Error al leer el archivo JSON: {e}")
+        return {
+            "series_title": series_title,
+            "last_episode_downloaded": 0,
+            "downloads": [],
+        }
 
     def save(self):
         self.filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -58,12 +62,15 @@ class DownloadRegistry:
         source: SOURCES,
         method: METHOD_TYPE,
         quality: QUALITY,
-        filename: Optional[str] = None,
+        path: Union[str, Path],
     ) -> EpisodeDownloaded:
         episode = int(episode) if isinstance(episode, str) else episode
+        path = path if isinstance(path, str) else str(path.resolve())
         assert source in get_args(SOURCES), f"Invalid source: {source}"
         assert method in get_args(METHOD_TYPE), f"Invalid method: {method}"
-        assert quality in get_args(QUALITY), f"Invalid quality: {quality}"
+        assert type(quality) in get_args(QUALITY) or quality in get_args(
+            QUALITY
+        ), f"Invalid quality: {quality}"
 
         entry: EpisodeDownloaded = {
             "episode": episode,
@@ -71,11 +78,8 @@ class DownloadRegistry:
             "method": method,
             "quality": quality,
             "datetime": datetime.now().isoformat(),
-            "filename": None,
+            "path": path,
         }
-
-        if filename:
-            entry["filename"] = filename
 
         self.data["downloads"].append(entry)
         self.save()
@@ -89,3 +93,12 @@ class DownloadRegistry:
 
     def __repr__(self):
         return f"<DownloadRegistry(series='{self.data['series_title']}', last_episode={self.data['last_episode_downloaded']})>"
+
+    def get_download_episodes(self, number: Union[int, str]) -> list[EpisodeDownloaded]:
+        number = int(number) if isinstance(number, str) else number
+        episodes = []
+        for episode in self.data["downloads"]:
+            if episode["episode"] == number and Path(episode["path"]).exists():
+                episodes.append(episode)
+
+        return episodes

@@ -11,8 +11,13 @@ import requests
 from config import YOUTUBE_RELEASE_TIME
 from logging_config import setup_logging
 from series_manager.caracoltv import CaracolTV
-from series_manager.download_register import DownloadRegistry
-from series_manager.schemes import DownloadJob, DownloadJobResult, YtDlpResponse
+from series_manager.download_register import DownloadRegistry, EpisodeDownloaded
+from series_manager.schemes import (
+    DownloadJob,
+    DownloadJobResult,
+    MainLoopResult,
+    YtDlpResponse,
+)
 from series_manager.yt_dlp_tools import (
     already_downloaded_today,
     download_media_item,
@@ -32,7 +37,7 @@ class RELEASE_MODE(enum.Enum):
     MANUAL = "manual"
 
 
-TEMPLATE_VIDEO = "{serie_name}.capitulo.{number}.yt.{quality}p{ext}"
+TEMPLATE_VIDEO = "{serie_name}.capitulo.{number}.yt.{quality_height}p{ext}"
 TEMPLATE_THUMBNAIL = "{serie_name}.capitulo.{number}.yt.thumbnail.jpg"
 logger = logging.getLogger(__name__)
 
@@ -71,7 +76,7 @@ def parallel_download(
     """Descarga una lita de jobs de descarga en paralelo y devuelve una lista de resultados."""
 
     downloaded_files = []
-    with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=2) as executor:
         futures = {
             executor.submit(download_media_item, job, temp_folder): job
             for job in download_jobs
@@ -84,7 +89,7 @@ def parallel_download(
     return downloaded_files
 
 
-def download_thumbnail(url: str, output_folder: Path, serie_name: str):
+def download_thumbnail(url: str, output_folder: Path, serie_name: str) -> Path:
     """Descarga la miniatura del episodio si no está descargada."""
     metadata = get_metadata(url)
     number = get_episode_number(metadata["title"])
@@ -138,7 +143,7 @@ def main_loop(
     output_folder: Path,
     mode: RELEASE_MODE,
     output_as_mp4: bool = True,
-):
+) -> Generator[MainLoopResult, None, None]:
     """Bucle principal de descarga del capítulo del día.
 
     Args:
@@ -153,36 +158,34 @@ def main_loop(
 
     logger.info("Iniciando el bucle principal de descarga del capítulo del día.")
     release_time = get_release_time(mode)
-    register = DownloadRegistry()
     while True:
         logger.info(f"Hora de lanzamiento: {release_time.strftime('%I:%M %p')}")
 
-        # today = datetime.now()
-        # if should_skip_today(today):
-        #     end_of_day = datetime.combine(today.date(), time(23, 59, 59))
-        #     sleep_progress((end_of_day - today).total_seconds())
-        #     continue
+        today = datetime.now()
+        if should_skip_today(today):
+            end_of_day = datetime.combine(today.date(), time(23, 59, 59))
+            sleep_progress((end_of_day - today).total_seconds())
+            continue
 
-        # if wait_until_release(today, release_time) and mode is RELEASE_MODE.AUTO:
-        #     # Una vez de la primera espera se vuelve a calcular la hora de lanzamiento.
-        #     # para casos donde la programacion pueda cambiar.
-        #     release_time = get_release_time(mode)
-        #     logger.info(f"Hora de lanzamiento actualizada.")
-        #     continue
+        if wait_until_release(today, release_time) and mode is RELEASE_MODE.AUTO:
+            # Una vez de la primera espera se vuelve a calcular la hora de lanzamiento.
+            # para casos donde la programacion pueda cambiar.
+            release_time = get_release_time(mode)
+            logger.info(f"Hora de lanzamiento actualizada.")
+            continue
 
-        url = "https://www.youtube.com/watch?v=gwZHLvWzOEQ"
+        url = get_episode_of_the_day()
         if not url:
             sleep_progress(120)
             continue
+        video_title = get_metadata(url)["title"]
+        number = get_episode_number(video_title)
+        serie_name_final = serie_name.replace(" ", ".").lower()
 
         temp_folder = prepare_folders(output_folder)
 
         download_jobs = get_download_jobs(url, qualities, output_as_mp4=output_as_mp4)
         downloaded_results = parallel_download(download_jobs, temp_folder)
-
-        video_title = get_metadata(url)["title"]
-        number = get_episode_number(video_title)
-        serie_name_final = serie_name.replace(" ", ".").lower()
 
         finales = []
         for download_result in downloaded_results:
@@ -194,25 +197,31 @@ def main_loop(
                 continue
 
             filename = TEMPLATE_VIDEO.format(
-                serie_name=serie_name,
+                serie_name=serie_name_final,
                 number=number,
                 quality_height=quality_height,
                 ext=video_path.suffix,
             )
             output = output_folder / filename
-            merge_with_ffmpeg(video_path, audio_path, str(output))
-            final = register.register_download(
-                episode=number,
-                source="youtube",
-                method="download",
-                quality=quality_label,
-                filename=filename,
-            )
-            finales.append(final)
+            if not output.exists():
+                merge_with_ffmpeg(video_path, audio_path, str(output))
+                register = DownloadRegistry()
+                register.register_download(
+                    episode=number,
+                    source="youtube",
+                    method="download",
+                    quality=quality_label,
+                    path=output,
+                )
+            finales.append(output)
 
         thumbnail_path = download_thumbnail(url, output_folder, serie_name_final)
 
-        yield {"videos": finales, "thumbnail": thumbnail_path, "episode_number": number}
+        yield {
+            "videos": finales,
+            "thumbnail": thumbnail_path,
+            "episode_number": number,
+        }
 
         logger.info("✅ Descarga del capítulo del día completada.")
 

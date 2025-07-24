@@ -24,6 +24,7 @@ if __name__ == "__main__":
         videos = episode_dled["videos"]
         thumbnail_path = episode_dled["thumbnail"]
         episode_number = episode_dled["episode_number"]
+
         print(f"Descargado episodio {episode_number} de {serie_name}")
 
         caption = f"Capítulo {episode_number} - Desafío Siglo XXI\n\n"
