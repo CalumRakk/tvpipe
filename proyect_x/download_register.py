@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional, TypedDict, Union, get_args
 
-from series_manager.schemes import QUALITY
+from .yt_downloader.schemas import QUALITY
 
 SOURCES = Literal["caracol", "ditu", "youtube"]
 METHOD_TYPE = Literal["download", "stream_capture"]

@@ -1,6 +1,5 @@
 import concurrent.futures
 import enum
-import json
 import logging
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -8,28 +7,19 @@ from typing import Generator, Optional, Sequence, Tuple, Union, cast
 
 import requests
 
-from config import YOUTUBE_RELEASE_TIME
-from logging_config import setup_logging
-from series_manager.caracoltv import CaracolTV
-from series_manager.download_register import DownloadRegistry, EpisodeDownloaded
-from series_manager.schemes import (
-    DownloadJob,
-    DownloadJobResult,
-    MainLoopResult,
-    YtDlpResponse,
-)
-from series_manager.yt_dlp_tools import (
+from proyect_x.caracoltv import CaracolTV
+from proyect_x.download_register import DownloadRegistry, EpisodeDownloaded
+
+from .core.download import merge_with_ffmpeg, sleep_progress
+from .core.episode import (
     already_downloaded_today,
-    download_media_item,
-    get_download_jobs,
     get_episode_number,
     get_episode_of_the_day,
-    get_format_type,
-    get_metadata,
-    merge_with_ffmpeg,
-    register_download,
-    sleep_progress,
 )
+from .core.formats import get_format_type
+from .core.jobs import download_media_item, get_download_jobs
+from .core.metadata import get_metadata
+from .schemas import DownloadJob, DownloadJobResult, MainLoopResult, YtDlpResponse
 
 
 class RELEASE_MODE(enum.Enum):
@@ -108,7 +98,7 @@ def get_release_time(mode) -> datetime:
     # Si se usa el modo "auto", se obtiene la hora de lanzamiento del desafío.
     # Si no, se usa una hora fija.
     # Por defecto, se establece a las 21:30 del día actual.
-    release_time = datetime.combine(datetime.now().date(), YOUTUBE_RELEASE_TIME)
+    release_time = None
     if mode == RELEASE_MODE.AUTO:
         caractol = CaracolTV()
         schedule = caractol.get_schedule_desafio()
@@ -116,6 +106,9 @@ def get_release_time(mode) -> datetime:
             release_time = schedule["endtime"] + timedelta(minutes=5)
             return release_time
         raise ValueError("No se encontró la programación del desafío.")
+    else:
+        release_time = datetime.combine(datetime.now().date(), YOUTUBE_RELEASE_TIME)  # type: ignore
+        pass  # FIXME: Corregir
     return release_time
 
 
@@ -161,18 +154,18 @@ def main_loop(
     while True:
         logger.info(f"Hora de lanzamiento: {release_time.strftime('%I:%M %p')}")
 
-        today = datetime.now()
-        if should_skip_today(today):
-            end_of_day = datetime.combine(today.date(), time(23, 59, 59))
-            sleep_progress((end_of_day - today).total_seconds())
-            continue
+        # today = datetime.now()
+        # if should_skip_today(today):
+        #     end_of_day = datetime.combine(today.date(), time(23, 59, 59))
+        #     sleep_progress((end_of_day - today).total_seconds())
+        #     continue
 
-        if wait_until_release(today, release_time) and mode is RELEASE_MODE.AUTO:
-            # Una vez de la primera espera se vuelve a calcular la hora de lanzamiento.
-            # para casos donde la programacion pueda cambiar.
-            release_time = get_release_time(mode)
-            logger.info(f"Hora de lanzamiento actualizada.")
-            continue
+        # if wait_until_release(today, release_time) and mode is RELEASE_MODE.AUTO:
+        #     # Una vez de la primera espera se vuelve a calcular la hora de lanzamiento.
+        #     # para casos donde la programacion pueda cambiar.
+        #     release_time = get_release_time(mode)
+        #     logger.info(f"Hora de lanzamiento actualizada.")
+        #     continue
 
         url = get_episode_of_the_day()
         if not url:
@@ -227,7 +220,6 @@ def main_loop(
 
 
 if __name__ == "__main__":
-    setup_logging(f"logs/{Path(__file__).stem}.log")
     serie_name = "desafio siglo xxi 2025"
     qualities = ["720", "360"]
     output_folder = Path("output")
