@@ -4,10 +4,12 @@ import logging
 import os
 import time
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Generator, List, Set, TypedDict
 
 import requests
+from pydantic import BaseModel
 
 # ============================
 # CONFIGURACIÓN
@@ -33,6 +35,85 @@ HEADERS: Dict[str, str] = {
     "Accept-Encoding": "gzip, deflate, br",
     "User-Agent": "okhttp/4.12.0",
 }
+
+
+class Schedule(BaseModel):
+    start_time: datetime
+    end_time: datetime
+    title: str
+    start_time_12hours: str
+    end_time_12hours: str
+    content_id: int
+    long_description: str
+    episode_title: str
+    episode_number: int
+    season: int
+    duration: int
+    episode_id: int
+
+
+class Ditu:
+
+    def _fetch_all_schedules(self, url, headers, params):
+        url = "https://varnish-prod.avscaracoltv.com/AGL/1.6/A/ENG/ANDROID/ALL/TRAY/EPG"
+        params = {
+            "orderBy": "orderId",
+            "sortOrder": "asc",
+            "filter_startTime": "1752978600000",
+            "filter_endTime": "1753000200000",
+        }
+        headers = {
+            "User-Agent": "okhttp/4.12.0",
+            "Accept-Encoding": "gzip, deflate, br",
+        }
+
+        response = requests.get(url, headers=headers, params=params)
+        return response.json()
+
+    def _extract_data_ditu(self):
+        for data in self._fetch_all_schedules(MPD_URL, HEADERS, PARAMS)["resultObj"][
+            "containers"
+        ]:
+            if data["id"] == "43":  # channelId= Desafio siglo xxi
+                return data
+
+    def get_schedule(self):
+        schedules = []
+        contents = self._extract_data_ditu()
+        if contents is None:
+            raise Exception("No se pudo obtener la programación")
+
+        for data in [i["metadata"] for i in contents["containers"]]:
+            start_time = datetime.fromtimestamp(data["airingStartTime"] / 1000)
+            end_time = datetime.fromtimestamp(data["airingEndTime"] / 1000)
+            title = data["title"].strip()
+            start_time_12hours = start_time.strftime("%Y-%m-%d %I:%M %p")
+            end_time_12hours = end_time.strftime("%Y-%m-%d %I:%M %p")
+            content_id = data["contentId"]
+            long_description = data["longDescription"].strip()
+            episode_title = data["episodeTitle"].strip()
+            episode_number = data["episodeNumber"]
+            season = data["season"]
+            duration = data["duration"]
+            episode_id = data["episodeId"]
+
+            schedules.append(
+                Schedule(
+                    start_time=start_time,
+                    end_time=end_time,
+                    title=title,
+                    start_time_12hours=start_time_12hours,
+                    end_time_12hours=end_time_12hours,
+                    content_id=content_id,
+                    long_description=long_description,
+                    episode_title=episode_title,
+                    episode_number=episode_number,
+                    season=season,
+                    duration=duration,
+                    episode_id=episode_id,
+                )
+            )
+        return schedules
 
 
 class MPDInfo(TypedDict):
@@ -212,3 +293,9 @@ def main(folder_output: Path) -> Generator[None, None, None]:
             logger.info(f"❌ Ocurrió un error inesperado: {e}")
             logger.info("🕒 Reintentando en 10 segundos...")
             time.sleep(5)
+
+
+if __name__ == "__main__":
+    ditu = Ditu()
+    schedule = ditu.get_schedule()
+    print(schedule)

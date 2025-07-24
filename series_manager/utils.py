@@ -6,6 +6,58 @@ from pathlib import Path
 import cv2
 
 logger = logging.getLogger(__name__)
+import subprocess
+
+
+def is_combination_valid(container: str, vcodec: str, acodec: str) -> bool:
+    command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",  # muestra solo errores
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=size=128x128:rate=1",  # fuente de video
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=1000",  # fuente de audio
+        "-t",
+        "1",  # duración: 1 segundo
+        "-c:v",
+        vcodec,
+        "-c:a",
+        acodec,
+        "-f",
+        container,
+        "-y",  # sobrescribe archivo de salida si existe
+        "dummy_output." + container,
+    ]
+
+    try:
+        subprocess.run(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+# Ejemplos de uso
+if __name__ == "__main__":
+    combos = [
+        ("mp4", "libx264", "aac"),
+        ("webm", "libvpx", "libvorbis"),
+        ("webm", "libx264", "aac"),  # inválido
+        ("mkv", "libx264", "aac"),
+    ]
+
+    for container, vcodec, acodec in combos:
+        result = is_combination_valid(container, vcodec, acodec)
+        print(
+            f"{container} | vcodec: {vcodec:10s} | acodec: {acodec:10s} -> {'✅ Válido' if result else '❌ Inválido'}"
+        )
 
 
 def load_stream_delay():

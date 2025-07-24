@@ -30,7 +30,7 @@ class Video(BaseModel):
 def progress(current, total, step=10):
     # Solo imprime cuando se cruza un múltiplo de step
     percentage = current * 100 / total
-    if percentage % step == 0:
+    if int(percentage) % step == 0:
         logger.info(f"{percentage:.1f}%")
 
 

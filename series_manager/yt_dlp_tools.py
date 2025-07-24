@@ -5,19 +5,109 @@ import math
 import os
 import re
 import subprocess
+import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
-from typing import Optional, cast
+from typing import (
+    Any,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    TypedDict,
+    Union,
+    cast,
+    get_args,
+)
 
 import yt_dlp
 from PIL import Image
+from yt_dlp.utils import DownloadError
+
+from series_manager.schemes import DownloadJob
+
+from .exceptions import QualityNotFoundError
+from .schemes import (
+    KLABEL_MAP,
+    YOUTUBE_AUDIO_CODECS,
+    YOUTUBE_VIDEO_CODECS,
+    KLabel,
+    QualityAlias,
+)
 
 PATH_DOWNLOAD_CACHE = Path("meta/downloaded_episode_releases.json")
 MEMORY = {}
 CACHE_FILE = Path("meta/urls_cache.json")
 CACHE = {}
 logger = logging.getLogger(__name__)
+
+
+def is_youtube_audio_codec(acodec: str) -> bool:
+    if not acodec:
+        return False
+    prefix = acodec.split(".")[0].lower()
+    return prefix in YOUTUBE_AUDIO_CODECS
+
+
+def is_youtube_video_codec(vcodec: str) -> bool:
+    if not vcodec:
+        return False
+    prefix = vcodec.split(".")[0].lower()
+    return prefix in YOUTUBE_VIDEO_CODECS
+
+
+def is_mp4_compatible(vcodec: str, acodec: str) -> bool:
+    """Verifica si los codec de video y audio son compatibles para merge directo a .mp4."""
+
+    # Solo puedes hacer merge directo a .mp4 si los códecs son H.264 (avc1) y AAC (mp4a).
+    # Youtube manera solo tres vcodec: av01,avc1, vp09 y vp9
+    vcodec = vcodec.lower()
+    acodec = acodec.lower()
+
+    return vcodec.startswith("avc1") and (acodec.startswith("mp4a") or acodec == "mp3")
+
+
+def resolve_quality_alias(alias: str, formats: list[dict]) -> int | None:
+    """Devuelve el formato con la calidad indicada por alias."""
+    if not formats:
+        return None
+    elif alias not in get_args(QualityAlias):
+        return None
+
+    candicates = [i for i in formats if i.get("vbr")]
+    sorted_candidates = sorted(candicates, key=lambda q: q["height"])
+
+    match alias.lower():
+        case "low":
+            return sorted_candidates[0]["height"]
+        case "medium":
+            if len(sorted_candidates) >= 3:
+                # Tomamos la mediana
+                return sorted_candidates[len(sorted_candidates) // 2]["height"]
+            else:
+                # No hay suficiente formatos, asi que tomamos el primero
+                return sorted_candidates[0]["height"]
+        case "best":
+            return sorted_candidates[-1]["height"]
+
+    return None
+
+
+def resolve_quality_label(label: str) -> int | None:
+    """Devuelve la resolución indicada por label."""
+    label = label.lower().strip()
+    # Primero: intenta con la constante
+    # Segundo: intenta extraer número del tipo "4320p"
+    if label in get_args(KLabel):
+        return KLABEL_MAP[label]
+
+    match = re.fullmatch(r"(\d+)\s*p", label)
+    if match:
+        return int(match.group(1))
+
+    return None
 
 
 def get_episode_of_the_day() -> Optional[str]:
@@ -73,40 +163,90 @@ def get_episode_number(string) -> str:
     raise Exception("No se encontró el número de episodio.")
 
 
-def get_best_video_format(url, target_height: int) -> str:
+def get_format_type(fmt):
+    if fmt.get("vcodec") == "none" and fmt.get("acodec") != "none":
+        return "audio"
+    elif fmt.get("acodec") == "none" and fmt.get("vcodec") != "none":
+        return "video"
+    elif fmt.get("vcodec") != "none" and fmt.get("acodec") != "none":
+        return "video+audio"
+    else:
+        return "unknown"
 
-    info = get_metadata(url)
-    formats = info["formats"]
 
-    # Obtener formatos de video con la altura deseada y sin audio (se espera concatenar audio después)
-    candidates = [
-        i
-        for i in formats
-        if i.get("height") == target_height
-        and i.get("audio_ext", "") == "none"
-        and i["ext"] in ["mp4", "mkv"]
+def is_format_untested(fmt):
+    return not all([fmt["format_id"], fmt.get("format_note"), fmt.get("protocol")])
+
+
+def get_best_video_combinations(
+    formats: list[dict], quality: Union[int, str], output_as_mp4: bool
+) -> list[tuple[str, str]]:
+    """
+    Devuelve combinaciones de format_id de video y audio en orden de mejor calidad a menor,
+    filtradas por calidad deseada y compatibilidad con MP4 si se indica.
+    """
+    # Resuelve altura especificada por quality
+    if isinstance(quality, int):
+        target_height = quality
+    elif quality in get_args(QualityAlias):
+        target_height = resolve_quality_alias(quality, formats)
+    elif str(quality).isdigit():
+        target_height = int(quality)
+    else:
+        target_height = resolve_quality_label(quality)
+
+    # Filtrar formatos de solo video que coincidan con la altura deseada
+    video_formats = [
+        fmt
+        for fmt in formats
+        if get_format_type(fmt) == "video"
+        and fmt.get("height") == target_height
+        and not is_format_untested(fmt)
     ]
-    if not candidates:
-        raise Exception(
-            f"No se encontraron formatos de video con altura {target_height}p y sin audio."
+
+    if output_as_mp4:
+        video_formats = [
+            fmt for fmt in video_formats if "avc1" in fmt.get("vcodec", "")
+        ]
+
+    if not video_formats:
+        raise QualityNotFoundError(
+            f"No se encontró un formato de video con la calidad especificada: {quality}"
         )
 
-    candidates.sort(key=lambda x: x.get("filesize") or 0, reverse=True)
-    best = candidates[0]
-    logger.info(
-        f"✅ Mejor video {target_height}p: format_id={best['format_id']}, bitrate={best['tbr']}k, ext={best['ext']}"
-    )
-    return best["format_id"]
+    # Ordenar por bitrate descendente
+    video_formats.sort(key=lambda x: x.get("vbr") or 0, reverse=True)
+
+    # Generar combinaciones  (video_id, audio_id) y si se especifica `output_as_mp4` las combinaciones las selecciona compatibles
+    combinations = []
+    for video_fmt in video_formats:
+        if output_as_mp4:
+            vc = video_fmt["vcodec"]
+            audio_formats = get_compatible_audio_formats_for_mp4(vc, formats)
+        else:
+            audio_formats = get_audio_formats_sorted(formats)
+        for audio_fmt in audio_formats:
+            combinations.append((video_fmt["format_id"], audio_fmt["format_id"]))
+    return combinations
 
 
-def get_best_audio_format(url) -> str:
-    info = get_metadata(url)
-    formats = info["formats"].copy()
-    # Filtrar formatos de audio que no tengan video
-    candidates = [i for i in formats if i.get("resolution", "") == "audio only"]
-    candidates.sort(key=lambda x: x.get("filesize") or 0, reverse=True)
-    best = candidates[0]
-    return best["format_id"]
+def get_audio_formats_sorted(formats: list[dict]) -> list[dict]:
+    """Devuelve todos los formatos de audio, ordenados por abr descendente."""
+    audio_formats = [fmt for fmt in formats if get_format_type(fmt) == "audio"]
+    return sorted(audio_formats, key=lambda fmt: fmt.get("abr") or 0, reverse=True)
+
+
+def get_compatible_audio_formats_for_mp4(
+    vcodec: str, formats: list[dict]
+) -> list[dict]:
+    """Devuelve los formatos de audio compatibles con MP4, ordenados por abr descendente."""
+    audio_formats = get_audio_formats_sorted(formats)
+    return [
+        fmt
+        for fmt in audio_formats
+        if get_format_type(fmt) == "audio"
+        and is_mp4_compatible(vcodec, fmt.get("acodec", ""))
+    ]
 
 
 def download_video(config: dict) -> list[tuple[int, str]]:
@@ -144,7 +284,9 @@ def download_audio(config) -> str:
         return info["requested_downloads"][0]["filepath"]
 
 
-def merge_with_ffmpeg(video_path: str, audio_path: str, output: str) -> None:
+def merge_with_ffmpeg(
+    video_path: Union[str, Path], audio_path: Union[str, Path], output: Union[str, Path]
+) -> None:
     # TODO: Usar doble comillas para encerrar las ruta, solo funciona en windows
     if os.path.exists(output):
         logger.info(f"El archivo {output} ya existe. Omitiendo fusión.")
@@ -156,9 +298,9 @@ def merge_with_ffmpeg(video_path: str, audio_path: str, output: str) -> None:
         "-loglevel",
         "error",  # <= nivel de log de ffmpeg
         "-i",
-        video_path,
+        str(video_path),
         "-i",
-        audio_path,
+        str(audio_path),
         "-c:v",
         "copy",  # copiar video sin recodificar
         "-c:a",
@@ -166,7 +308,7 @@ def merge_with_ffmpeg(video_path: str, audio_path: str, output: str) -> None:
         "-strict",
         "experimental",
         "-shortest",  # corta al stream más corto
-        output,
+        str(output),
     ]
     subprocess.run(cmd, check=True)
     logger.info(f"Archivo final: {output}")
@@ -214,45 +356,65 @@ def my_progress_hook(d):
         print(f"{path.name} Descarga completada.")
 
 
-def download_media_item(url: str, format_id: str, output_folder: Path) -> str:
+def download_media_item(job: DownloadJob, output_folder: Path) -> dict:
     """
     Descarga un único item (video o audio) usando un format_id específico.
     Esta función está diseñada para ser ejecutada en un proceso separado.
+    Retorna el path del archivo descargado o lanza un error descriptivo.
     """
-    output_template = f"{output_folder}/%(id)s_{format_id}_%(resolution)s.%(ext)s"
-
+    output_template = f"{output_folder}/%(id)s_%(format_id)s_%(resolution)s.%(ext)s"
+    url = job["url"]
+    format_id = "/".join(f"{i[0]}+{i[1]}" for i in job["combinations"])
     ydl_opts = {
-        "format": format_id,
+        "format": format_id,  # '229+140-drc|229+140|133+140-drc|133+140'
         "outtmpl": output_template,
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
-        "retries": 10,  # Reintentos en caso de fallo de red
+        "retries": 10,
         "fragment_retries": 10,
         "progress_hooks": [my_progress_hook],
         "progress": None,
         "noprogress": True,
+        "merge_output_format": None,
+        "postprocessors": [],
+        "allow_unplayable_formats": True,
+        # 'paths': {'home': './descargas'}, # Carpeta opcional
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = cast(dict, ydl.extract_info(url, download=True))
-        filepath = info["requested_downloads"][0]["filepath"]
-        logger.info(f"✔️ Descarga completada: {Path(filepath).name}")
-        return filepath
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = cast(dict, ydl.extract_info(url, download=True))
+            filepath = info["requested_downloads"][0]["filepath"]
+            logger.info(f"✔️ Descarga completada: {Path(filepath).name}")
+            return info
+    except DownloadError as e:
+        error_msg = f"❌ Error al descargar {url} con format {format_id}: {e}"
+        logger.error(error_msg)
+        # Puedes elegir si relanzas o devuelves un resultado especial
+        raise RuntimeError(error_msg)
+    except Exception as e:
+        error_msg = f"⚠️ Excepción inesperada al descargar {url}: {str(e)}"
+        logger.error(error_msg)
+        logger.debug(traceback.format_exc())
+        raise RuntimeError(error_msg)
 
 
-def get_download_jobs(url: str, qualities: list[int]):
+def get_download_jobs(
+    url: str, qualities: Sequence[Union[int, str]], output_as_mp4
+) -> list[DownloadJob]:
     download_jobs = []
+    formats = get_metadata(url)["formats"]
     for quality in qualities:
-        format_id = get_best_video_format(url, quality)
+        combinations = get_best_video_combinations(formats, quality, output_as_mp4)
         download_jobs.append(
-            {"type": "video", "quality": quality, "format_id": format_id, "url": url}
+            {
+                "quality": quality,
+                "combinations": combinations,
+                "url": url,
+                "output_as_mp4": output_as_mp4,
+            }
         )
-
-    format_id = get_best_audio_format(url)
-    download_jobs.append(
-        {"type": "audio", "quality": "best", "format_id": format_id, "url": url}
-    )
     return download_jobs
 
 

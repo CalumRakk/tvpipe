@@ -1,22 +1,25 @@
 import concurrent.futures
 import enum
+import json
 import logging
-import typing
 from datetime import datetime, time, timedelta
 from pathlib import Path
-from typing import TypedDict
+from typing import Generator, Optional, Sequence, Tuple, Union, cast
 
 import requests
 
 from config import YOUTUBE_RELEASE_TIME
 from logging_config import setup_logging
 from series_manager.caracoltv import CaracolTV
+from series_manager.download_register import DownloadRegistry
+from series_manager.schemes import DownloadJob, DownloadJobResult, YtDlpResponse
 from series_manager.yt_dlp_tools import (
     already_downloaded_today,
     download_media_item,
     get_download_jobs,
     get_episode_number,
     get_episode_of_the_day,
+    get_format_type,
     get_metadata,
     merge_with_ffmpeg,
     register_download,
@@ -32,12 +35,6 @@ class RELEASE_MODE(enum.Enum):
 TEMPLATE_VIDEO = "{serie_name}.capitulo.{number}.yt.{quality}p{ext}"
 TEMPLATE_THUMBNAIL = "{serie_name}.capitulo.{number}.yt.thumbnail.jpg"
 logger = logging.getLogger(__name__)
-
-
-class EpisodeDownloaded(TypedDict):
-    videos: list[Path]
-    thumbnail: Path
-    episode_number: str
 
 
 def should_skip_today(today):
@@ -68,46 +65,23 @@ def prepare_folders(output_folder):
     return temp_folder
 
 
-def parallel_download(download_jobs, temp_folder):
-    """Descarga los archivos de forma paralela utilizando ProcessPoolExecutor."""
-    downloaded_files = {}
+def parallel_download(
+    download_jobs: list[DownloadJob], temp_folder
+) -> list[DownloadJobResult]:
+    """Descarga una lita de jobs de descarga en paralelo y devuelve una lista de resultados."""
+
+    downloaded_files = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
         futures = {
-            executor.submit(
-                download_media_item, job["url"], job["format_id"], temp_folder
-            ): job
+            executor.submit(download_media_item, job, temp_folder): job
             for job in download_jobs
         }
         for future in concurrent.futures.as_completed(futures):
-            job = futures[future]
-            result = future.result()
-            if job["type"] == "audio":
-                downloaded_files["audio"] = result
-            else:
-                downloaded_files.setdefault("videos", {})[job["quality"]] = result
+            job = cast(DownloadJob, futures[future])
+            result = cast(YtDlpResponse, future.result())
+            download_result = {"download_job": job, "ytdlp_response": result}
+            downloaded_files.append(download_result)
     return downloaded_files
-
-
-def merge_files(
-    downloaded_files, output_folder: Path, serie_name, number
-) -> list[Path]:
-    """Merge los archivos de video y audio descargados."""
-    if "audio" not in downloaded_files or "videos" not in downloaded_files:
-        logger.error("No se encontraron archivos de audio o video para fusionar.")
-        raise ValueError("No se encontraron archivos de audio o video para fusionar.")
-
-    audio_path = downloaded_files["audio"]
-    finales = []
-    for quality, video_path in downloaded_files["videos"].items():
-        ext = Path(video_path).suffix
-        filename = TEMPLATE_VIDEO.format(
-            serie_name=serie_name, number=number, quality=quality, ext=ext
-        )
-        output = output_folder / filename
-        merge_with_ffmpeg(video_path, audio_path, str(output))
-        logger.info(f"Archivo final: {output}")
-        finales.append(output)
-    return finales
 
 
 def download_thumbnail(url: str, output_folder: Path, serie_name: str):
@@ -140,63 +114,113 @@ def get_release_time(mode) -> datetime:
     return release_time
 
 
+def extract_files_from_download_result(
+    download_result: DownloadJobResult,
+) -> Tuple[Optional[Path], Optional[Path], Optional[int]]:
+    video = None
+    audio = None
+    quality_height = None
+    for formatsimple in download_result["ytdlp_response"]["requested_downloads"][0][
+        "requested_formats"
+    ]:
+        if get_format_type(formatsimple) == "video":
+            video = Path(formatsimple["filepath"]).resolve()
+            quality_height = formatsimple["height"]
+
+        elif get_format_type(formatsimple) == "audio":
+            audio = Path(formatsimple["filepath"]).resolve()
+    return (video, audio, quality_height)
+
+
 def main_loop(
     serie_name: str,
-    qualities: list[int],
+    qualities: Sequence[Union[int, str]],
     output_folder: Path,
     mode: RELEASE_MODE,
-) -> typing.Generator[EpisodeDownloaded, None, None]:
+    output_as_mp4: bool = True,
+):
+    """Bucle principal de descarga del capítulo del día.
+
+    Args:
+        serie_name (str): Nombre de la serie.
+        qualities (list[int]): Listado de resoluciones a descargar.
+        output_folder (Path): Carpeta de salida.
+        mode (RELEASE_MODE): Modo de lanzamiento.
+        output_as_mp4 (bool): Si se debe descargar el capítulo como MP4.
+
+    Nota: output_as_mp4 influye en la calidad de los formatos de video. Cuando es True, se seleccionará solo mejor calidad especifica que sea compatible para mergear video con audio para MP4.
+    """
+
     logger.info("Iniciando el bucle principal de descarga del capítulo del día.")
     release_time = get_release_time(mode)
+    register = DownloadRegistry()
     while True:
         logger.info(f"Hora de lanzamiento: {release_time.strftime('%I:%M %p')}")
 
-        today = datetime.now()
-        if should_skip_today(today):
-            end_of_day = datetime.combine(today.date(), time(23, 59, 59))
-            sleep_progress((end_of_day - today).total_seconds())
-            continue
+        # today = datetime.now()
+        # if should_skip_today(today):
+        #     end_of_day = datetime.combine(today.date(), time(23, 59, 59))
+        #     sleep_progress((end_of_day - today).total_seconds())
+        #     continue
 
-        if wait_until_release(today, release_time) and mode is RELEASE_MODE.AUTO:
-            # Una vez de la primera espera se vuelve a calcular la hora de lanzamiento.
-            # para casos donde la programacion pueda cambiar.
-            release_time = get_release_time(mode)
-            logger.info(f"Hora de lanzamiento actualizada.")
-            continue
+        # if wait_until_release(today, release_time) and mode is RELEASE_MODE.AUTO:
+        #     # Una vez de la primera espera se vuelve a calcular la hora de lanzamiento.
+        #     # para casos donde la programacion pueda cambiar.
+        #     release_time = get_release_time(mode)
+        #     logger.info(f"Hora de lanzamiento actualizada.")
+        #     continue
 
-        url = get_episode_of_the_day()
+        url = "https://www.youtube.com/watch?v=gwZHLvWzOEQ"
         if not url:
             sleep_progress(120)
             continue
 
         temp_folder = prepare_folders(output_folder)
 
-        download_jobs = get_download_jobs(url, qualities)
-        downloaded_files = parallel_download(download_jobs, temp_folder)
+        download_jobs = get_download_jobs(url, qualities, output_as_mp4=output_as_mp4)
+        downloaded_results = parallel_download(download_jobs, temp_folder)
 
         video_title = get_metadata(url)["title"]
         number = get_episode_number(video_title)
         serie_name_final = serie_name.replace(" ", ".").lower()
 
-        videos = merge_files(
-            downloaded_files,
-            output_folder,
-            serie_name_final,
-            number,
-        )
+        finales = []
+        for download_result in downloaded_results:
+            quality_label = download_result["download_job"]["quality"]
+            video_path, audio_path, quality_height = extract_files_from_download_result(
+                download_result
+            )
+            if video_path is None or audio_path is None:
+                continue
+
+            filename = TEMPLATE_VIDEO.format(
+                serie_name=serie_name,
+                number=number,
+                quality_height=quality_height,
+                ext=video_path.suffix,
+            )
+            output = output_folder / filename
+            merge_with_ffmpeg(video_path, audio_path, str(output))
+            final = register.register_download(
+                episode=number,
+                source="youtube",
+                method="download",
+                quality=quality_label,
+                filename=filename,
+            )
+            finales.append(final)
 
         thumbnail_path = download_thumbnail(url, output_folder, serie_name_final)
 
-        logger.info("✅ Descarga del capítulo del día completada.")
-        yield {"videos": videos, "thumbnail": thumbnail_path, "episode_number": number}
+        yield {"videos": finales, "thumbnail": thumbnail_path, "episode_number": number}
 
-        register_download(number)
+        logger.info("✅ Descarga del capítulo del día completada.")
 
 
 if __name__ == "__main__":
     setup_logging(f"logs/{Path(__file__).stem}.log")
     serie_name = "desafio siglo xxi 2025"
-    qualities = [720, 360]
+    qualities = ["720", "360"]
     output_folder = Path("output")
     mode = RELEASE_MODE.AUTO
 
