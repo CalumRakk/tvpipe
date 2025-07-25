@@ -58,7 +58,9 @@ def wait_end_of_day():
 def wait_release(mode):
     """Espera hasta la hora de lanzamiento del capítulo (especificada en release_time)."""
     release_time = get_release_time(mode)
-    logger.info(f"Hora de lanzamiento: {release_time.strftime('%I:%M %p')}")
+    logger.info(
+        f"Hora de publicacion del capitulo en youtube: {release_time.strftime('%I:%M %p')}"
+    )
     today = datetime.now()
     difference = release_time - today
     sleep_progress(difference.total_seconds())

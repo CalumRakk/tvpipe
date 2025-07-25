@@ -52,12 +52,12 @@ def get_episode_of_the_day() -> Optional[str]:
                 timestamp = datetime.fromtimestamp(info["timestamp"])
                 is_today = timestamp.date() == datetime.now().date()
                 is_live = info.get("was_live")
-                if (is_today or is_live is False) and not "avance" in title.lower():
+                if is_today and is_live is False and not "avance" in title.lower():
                     logger.info(f"✔️ Encontrado el episodio del dia: {title}")
                     return url
             except Exception:
                 continue
-        logger.info(f"❌ No se encontró el episodio del dia: {title}")
+        logger.info(f"❌ No se encontró el episodio del dia.")
 
 
 def get_episode_number(string: str) -> str:
