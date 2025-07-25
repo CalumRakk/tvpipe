@@ -26,6 +26,8 @@ class AppSettings(BaseSettings):
         values = values + "," if "," in values else values
         parsed = []
         for value in values.split(","):
+            if not value.strip() or value == " ":
+                continue
             if value.strip().isdigit():
                 parsed.append(int(value.strip()))
             else:
