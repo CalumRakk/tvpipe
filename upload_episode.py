@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from proyect_x.logging_config import setup_logging
-from proyect_x.upload.send_video import send_videos_as_media_group
-from proyect_x.upload.settings import get_settings
+from proyect_x.uploader.send_video import send_videos_as_media_group
+from proyect_x.uploader.settings import get_settings
 
 if __name__ == "__main__":
     setup_logging(f"logs/{Path(__file__).stem}.log")

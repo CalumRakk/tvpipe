@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from proyect_x.logging_config import setup_logging
-from proyect_x.upload.send_video import main as send_video_to_telegram
-from proyect_x.upload.settings import get_settings as get_upload_settings
+from proyect_x.uploader.send_video import main as send_video_to_telegram
+from proyect_x.uploader.settings import get_settings as get_upload_settings
 from proyect_x.yt_downloader.config.settings import get_settings as get_yt_settings
 from proyect_x.yt_downloader.runner import main_loop
 from scripts.create_thumbnail_with_watermaker import add_watermark_to_image

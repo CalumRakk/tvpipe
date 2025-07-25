@@ -11,8 +11,14 @@ from pyrogram.errors.exceptions import BadRequest
 from pyrogram.types import Chat, InputMediaVideo, Message
 from tqdm import tqdm  # type: ignore
 
-from proyect_x.upload.settings import AppSettings
-from proyect_x.upload.utils import get_video_metadata
+from proyect_x.shared.download_register import (
+    RegisterVideoUpload,
+    get_videopath_registered,
+    register_video_upload,
+    was_videopath_registered,
+)
+from proyect_x.uploader.settings import AppSettings
+from proyect_x.uploader.utils import get_video_metadata
 
 CACHE_PATH = "meta/upload_cache.json"
 logger = logging.getLogger(__name__)
@@ -63,8 +69,21 @@ def get_videos(video_paths: list[str]) -> list[Video]:
     return videos
 
 
+def _get_chat_info(client: Client, chat_id):
+    try:
+        chat_info = cast(Chat, client.get_chat(chat_id))
+        username = chat_info.username or chat_info.id
+        logger.info(f"Información del chat_id: {username} ({chat_id})")
+        return chat_info
+    except BadRequest as e:
+        logger.error(f"Error al obtener información del chat {chat_id}: {e}")
+    except Exception as e:
+        logger.error(f"Error inesperado al obtener información del chat {chat_id}: {e}")
+    return None
+
+
 def send_videos_to_chat_temp(
-    client, chat_id, videos, thumbnail_path: Union[str, Path]
+    client: Client, chat_id, videos, thumbnail_path: Union[str, Path]
 ) -> list[Message]:
     """Sube los videos a Telegram y devuelve una lista de mensajes."""
     # TODO: La orientacion de una miniatura especificada (horizontal o vertical), debe coincidir con la del video sino, la miniatura se redimensionara de forma incorrecta.
@@ -72,27 +91,62 @@ def send_videos_to_chat_temp(
         logger.error("No se han proporcionado videos para enviar.")
         return []
 
-    try:
-        chat_info = cast(Chat, client.get_chat(chat_id))
-        username = chat_info.username or chat_info.id
-        logger.info(f"Informacion del chat_id : {username} ({chat_id})")
-    except BadRequest as e:
-        logger.error(f"Error al obtener información del chat {chat_id}: {e}")
-        return []
-    except Exception as e:
-        logger.error(f"Error inesperado al obtener información del chat {chat_id}: {e}")
+    chat_info = cast(Chat, client.get_chat(chat_id))
+    if not chat_info:
+        logger.error(f"No se pudo obtener información del chat {chat_id}.")
         return []
 
     logger.info(
         f"Enviando {len(videos)} videos al chat ({chat_id}), con la miniatura {thumbnail_path}"
     )
+
     messages = []
     for index, video in enumerate(videos, start=1):
-        video_path = Path(video.path)
-        # video_inodo = f"{video_path.stat().st_dev}-{video_path.stat().st_ino}"
-        logger.info(
-            f"Enviando video {index}/{len(videos)}: {video_path.name} ({video.size_mb:.2f} MB)"
+        message = _process_single_video(
+            client, chat_id, video, thumbnail_path, index, len(videos)
         )
+        if message:
+            messages.append(message)
+
+    logger.info(f"Total de videos enviados: {len(messages)}")
+    return messages
+
+
+def _process_single_video(
+    client: Client,
+    chat_id,
+    video: Video,
+    thumbnail_path: Union[str, Path],
+    index: int,
+    total: int,
+):
+    video_path = Path(video.path)
+
+    if was_videopath_registered(video_path):
+        logger.info(
+            f"El video {video_path.name} ya fue registrado. Verificando si ya fue enviado."
+        )
+        data = cast(RegisterVideoUpload, get_videopath_registered(video_path))
+        message = cast(
+            Message, client.get_messages(data["chat_id"], data["message_id"])
+        )
+
+        if not message.empty:
+            logger.info(
+                f"El video {video_path.name} ya fue enviado anteriormente. "
+                f"Reutilizando el mensaje con ID {message.id}."
+            )
+            return message
+        else:
+            logger.info(
+                f"El video {video_path.name} no se encuentra en el chat {data['chat_id']}. Se reenviará."
+            )
+
+    logger.info(
+        f"Enviando video {index}/{total}: {video_path.name} ({video.size_mb:.2f} MB)"
+    )
+
+    try:
         message = cast(
             Message,
             client.send_video(
@@ -104,15 +158,71 @@ def send_videos_to_chat_temp(
                 duration=video.duration,
                 width=video.width,
                 height=video.height,
-                thumb=thumbnail_path,
+                thumb=str(thumbnail_path),
                 disable_notification=True,
             ),
         )
-        messages.append(message)
+        register_video_upload(
+            message_id=message.id,
+            chat_id=chat_id,
+            video_path=video.path,
+        )
         logger.info(f"Video enviado: {message.video.file_id}")
+        return message
+    except Exception as e:
+        logger.error(f"Error al enviar el video {video_path.name}: {e}")
+        return None
 
-    logger.info(f"Total de videos enviados: {len(messages)}")
-    return messages
+    # logger.info(
+    #     f"Enviando {len(videos)} videos al chat ({chat_id}), con la miniatura {thumbnail_path}"
+    # )
+    # messages = []
+    # for index, video in enumerate(videos, start=1):
+    #     video_path = Path(video.path)
+    #     if was_videopath_registered(video_path):
+    #         data = cast(RegisterVideoUpload, get_videopath_registered(video_path))
+    #         message = cast(
+    #             Message, client.get_messages(data["chat_id"], data["message_id"])
+    #         )
+    #         if message.empty is True:
+    #             logger.info(
+    #                 f"El video {video_path.name} no se encuentra en el chat {data['chat_id']}. Se reenviará."
+    #             )
+    #         else:
+    #             messages.append(message)
+    #             logger.info(
+    #                 f"El video {video_path.name} ya fue enviado anteriormente. Reutilizando el mensaje con ID {message.id}."
+    #             )
+    #             continue
+
+    #     logger.info(
+    #         f"Enviando video {index}/{len(videos)}: {video_path.name} ({video.size_mb:.2f} MB)"
+    #     )
+    #     message = cast(
+    #         Message,
+    #         client.send_video(
+    #             chat_id=chat_id,
+    #             video=video.path,
+    #             file_name=video_path.name,
+    #             caption=video_path.name,
+    #             progress=progress,
+    #             duration=video.duration,
+    #             width=video.width,
+    #             height=video.height,
+    #             thumb=str(thumbnail_path),
+    #             disable_notification=True,
+    #         ),
+    #     )
+    #     messages.append(message)
+    #     register_video_upload(
+    #         message_id=message.id,
+    #         chat_id=chat_id,
+    #         video_path=video.path,
+    #     )
+    #     logger.info(f"Video enviado: {message.video.file_id}")
+
+    # logger.info(f"Total de videos enviados: {len(messages)}")
+    # return messages
 
 
 def instance_messages_to_media_group(
@@ -244,7 +354,6 @@ def send_videos_as_media_group(
 
     resend_videos_as_media_group(client, chat_ids, media_group)
 
-    client.delete_messages(chat_id, [message.id for message in messages])  # type: ignore
+    client.delete_messages(chat_temp, [message.id for message in messages])  # type: ignore
     client.stop()  # type: ignore
-    clear_cache()
     logger.info("Envío de videos completado")
