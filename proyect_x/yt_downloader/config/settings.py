@@ -78,6 +78,12 @@ def get_settings(env_path: Path | None = None) -> AppSettings:
     Carga configuración desde un archivo .env (si se proporciona) o usa valores por defecto.
     """
     if env_path:
+        env_path = Path(env_path) if not env_path.is_absolute() else env_path
+        if not env_path.exists():
+            raise FileNotFoundError(
+                f"El archivo de configuración {env_path} no existe."
+            )
+
         try:
             return AppSettings(_env_file=env_path)  # type: ignore
         except ValidationError as e:

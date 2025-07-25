@@ -75,7 +75,7 @@ def get_episode_url(config) -> str:
         if wait_until_release(config) and config.mode is RELEASE_MODE.AUTO:
             # Si mode está en auto, al finalizar la espera del lanzamiento,
             # se vuelve a obtener la hora de lanzamiento para casos donde la programación pueda cambiar.
-            wait_release(config.mode)
+            wait_release(config)
             continue
 
         url = get_episode_of_the_day()

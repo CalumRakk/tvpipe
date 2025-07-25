@@ -3,11 +3,12 @@ import logging
 from os import getenv
 from pathlib import Path
 from platform import system
-from typing import Optional, Sequence, Union, cast
+from typing import List, Optional, Sequence, Union, cast
 
 from pydantic import BaseModel
 from pyrogram import Client  # type: ignore
-from pyrogram.types import InputMediaVideo, Message
+from pyrogram.errors.exceptions import BadRequest
+from pyrogram.types import Chat, InputMediaVideo, Message
 from tqdm import tqdm  # type: ignore
 
 from proyect_x.upload.settings import AppSettings
@@ -62,15 +63,36 @@ def get_videos(video_paths: list[str]) -> list[Video]:
     return videos
 
 
-def send_videos(
-    client: Client, chat_id: Union[int, str], videos: list[Video], thumbnail_path: str
+def send_videos_to_chat_temp(
+    client, chat_id, videos, thumbnail_path: Union[str, Path]
 ) -> list[Message]:
     """Sube los videos a Telegram y devuelve una lista de mensajes."""
     # TODO: La orientacion de una miniatura especificada (horizontal o vertical), debe coincidir con la del video sino, la miniatura se redimensionara de forma incorrecta.
+    if len(videos) == 0:
+        logger.error("No se han proporcionado videos para enviar.")
+        return []
+
+    try:
+        chat_info = cast(Chat, client.get_chat(chat_id))
+        username = chat_info.username or chat_info.id
+        logger.info(f"Informacion del chat_id : {username} ({chat_id})")
+    except BadRequest as e:
+        logger.error(f"Error al obtener información del chat {chat_id}: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Error inesperado al obtener información del chat {chat_id}: {e}")
+        return []
+
+    logger.info(
+        f"Enviando {len(videos)} videos al chat ({chat_id}), con la miniatura {thumbnail_path}"
+    )
     messages = []
-    for video in videos:
+    for index, video in enumerate(videos, start=1):
         video_path = Path(video.path)
         # video_inodo = f"{video_path.stat().st_dev}-{video_path.stat().st_ino}"
+        logger.info(
+            f"Enviando video {index}/{len(videos)}: {video_path.name} ({video.size_mb:.2f} MB)"
+        )
         message = cast(
             Message,
             client.send_video(
@@ -87,37 +109,85 @@ def send_videos(
             ),
         )
         messages.append(message)
+        logger.info(f"Video enviado: {message.video.file_id}")
+
+    logger.info(f"Total de videos enviados: {len(messages)}")
     return messages
 
 
-def resend_videos_as_media_group(
-    client: Client,
-    chat_id: Union[int, str],
-    caption: str,
-    messages: list[Message],
-    forward: Optional[Sequence[Union[int, str]]] = None,
-) -> list[Message]:
-    """Reenvia los videos como un grupo de medios, con un caption personalizado."""
+def instance_messages_to_media_group(
+    messages: list[Message], caption
+) -> list[InputMediaVideo]:
+    """Instancia los mensajes de video a un grupo de medios."""
     media_group = []
-    for index, message in enumerate(messages):
+    for index, message in enumerate(messages, start=0):
+        if not message.video:
+            logger.warning(
+                f"El mensaje (chat_id={message.chat.id}, message_id={message.id}) no contiene un video. Se omitirá."
+            )
+            continue
         file_id = message.video.file_id
+        logger.debug(
+            f"Agregando video (chat_id={message.chat.username}, message_id={message.id}) a media group: file_id={file_id}"
+        )
         inputmediavideo = InputMediaVideo(
             media=file_id, caption=caption if index == 0 else ""
         )
         media_group.append(inputmediavideo)
 
-    if forward is None:
-        forward_final = [chat_id]
-    else:
-        forward_final = [chat_id] + cast(list, forward)
-
-    messages = []
-    for forward_chat_id in forward_final:
-        logger.info(f"Reenviando videos a {forward_chat_id}")
-        messages.extend(
-            cast(list[Message], client.send_media_group(forward_chat_id, media_group))
+    if not media_group:
+        logger.error("No se pudo construir el grupo de medios: no hay videos válidos.")
+        return []
+    elif len(media_group) < 2:
+        logger.warning(
+            "Se está intentando enviar un grupo de medios con menos de 2 videos. Se esperará a que haya más videos."
         )
-    return messages
+        return []
+
+    logger.info(f"Grupo de medios creado con {len(media_group)} videos.")
+    return media_group
+
+
+def reensend_media_group(
+    client: Client,
+    chat_ids: Sequence[Union[int, str]],
+    media_group: List[InputMediaVideo],
+):
+    """Reenvía un grupo de medios a un chats específicos."""
+
+    logger.debug(f"Lista final de destinos: {chat_ids}")
+    sent_messages = []
+    for chat_id in chat_ids:
+        try:
+            logger.info(f"Reenviando grupo de medios a {chat_id}")
+            messages = cast(
+                list[Message], client.send_media_group(chat_id, media_group)  # type: ignore
+            )
+            sent_messages.extend(cast(list[Message], messages))
+            logger.debug(f"Envío exitoso a {chat_id}")
+        except Exception as e:
+            logger.exception(f"Error al reenviar a {chat_id}: {e}")
+
+    logger.info(f"Reenvío completado. Total de mensajes enviados: {len(sent_messages)}")
+
+
+def resend_videos_as_media_group(
+    client: Client, chat_ids: Sequence[Union[int, str]], media_group
+) -> list[Message]:
+    """Reenvia los videos como un grupo de medios, con un caption personalizado."""
+
+    sent_messages = []
+    for chat_id in chat_ids:
+        try:
+            logger.info(f"Reenviando grupo de medios a {chat_id}")
+            result = cast(list[Message], client.send_media_group(chat_id, media_group))
+            sent_messages.extend(cast(list[Message], result))
+            logger.debug(f"Envío exitoso a {chat_id}")
+        except Exception as e:
+            logger.exception(f"Error al reenviar a {chat_id}: {e}")
+
+    logger.info(f"Reenvío completado. Total de mensajes enviados: {len(sent_messages)}")
+    return sent_messages
 
 
 def add_subcaption(caption: str, videos: list[Video]) -> str:
@@ -147,23 +217,33 @@ def get_client_started(config: AppSettings) -> Client:
     return client
 
 
-def main(episode_number, config: AppSettings):
-    logger.info("Iniciando el envío de videos a Telegram")
-    if len(config.video_paths) == 0:
+def send_videos_as_media_group(
+    video_paths: Sequence[Union[str, Path]],
+    thumbnail_path: Union[str, Path],
+    episode_number,
+    config: AppSettings,
+):
+    logger.info(f"Iniciando el envío de videos a Telegram")
+    if len(video_paths) == 0:
         logger.error("No se han proporcionado rutas de videos.")
         return
-
-    chat_id = config.chat_id
-    forward = config.forward
-    caption = config.caption.format(episode=episode_number)
-
-    videos = get_videos(cast(list[str], config.video_paths))
-    client = get_client_started(config)
-    caption_final = add_subcaption(caption, videos)
-    messages = send_videos(client, chat_id, videos, config.thumbnail_path)
-    resend_videos_as_media_group(
-        client, chat_id, caption=caption_final, messages=messages, forward=forward
+    video_paths = [str(path) for path in video_paths]
+    thumbnail_path = (
+        str(thumbnail_path) if isinstance(thumbnail_path, Path) else thumbnail_path
     )
+    chat_ids = config.chat_ids
+    chat_temp = config.chat_id_temporary
+    caption = config.caption.format(episode=episode_number)
+    # Obtiene metadatos de videos para completar el caption del media_group
+    videos = get_videos([str(i) for i in video_paths])
+    caption_final = add_subcaption(caption, videos)
+
+    client = get_client_started(config)
+    messages = send_videos_to_chat_temp(client, chat_temp, videos, thumbnail_path)
+    media_group = instance_messages_to_media_group(messages, caption_final)
+
+    resend_videos_as_media_group(client, chat_ids, media_group)
+
     client.delete_messages(chat_id, [message.id for message in messages])  # type: ignore
     client.stop()  # type: ignore
     clear_cache()
