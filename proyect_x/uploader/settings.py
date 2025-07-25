@@ -9,6 +9,14 @@ from pydantic import Field, ValidationError, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def is_digit(s: str) -> bool:
+    try:
+        int(s.strip())
+        return True
+    except ValueError:
+        return False
+
+
 class AppSettings(BaseSettings):
     api_hash: str
     api_id: int
@@ -28,7 +36,7 @@ class AppSettings(BaseSettings):
         for value in values.split(","):
             if not value.strip() or value == " ":
                 continue
-            if value.strip().isdigit():
+            if is_digit(value):
                 parsed.append(int(value.strip()))
             else:
                 parsed.append(value.strip())

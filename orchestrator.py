@@ -11,8 +11,8 @@ if __name__ == "__main__":
     setup_logging(f"logs/{Path(__file__).stem}.log")
 
     # --- Configuracion de la serie y calidades ---
-    config_yt = get_yt_settings(env_path=Path(".env/.download_video.test.env"))
-    config_upload = get_upload_settings(env_path=Path(".env/.upload_episode.test.env"))
+    config_yt = get_yt_settings(env_path=Path(".env/.download_video.env"))
+    config_upload = get_upload_settings(env_path=Path(".env/.upload_episode.env"))
 
     watermark_text = "Visita https://t.me/eldesafio3"
     for episode_dled in main_loop(config_yt):
