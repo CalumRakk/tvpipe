@@ -63,6 +63,9 @@ def _save_registry(
 
 
 def register_episode_downloaded(episode: str, file_path: Union[str, Path]):
+
+    file_path = Path(file_path).resolve() if isinstance(file_path, str) else file_path
+
     data = _load_registry()
     entry: RegisterEntry = {
         "event": "download",

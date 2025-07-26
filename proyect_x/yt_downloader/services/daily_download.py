@@ -99,9 +99,7 @@ def postprocess_and_register(
             merge_with_ffmpeg(video_path, audio_path, str(output))
             register_episode_downloaded(
                 episode=number,
-                event="download",
                 file_path=output,
-                source="yt_downloader",
             )
 
         finales.append(output)
