@@ -26,7 +26,7 @@ from proyect_x.yt_downloader.schemas import (
     QualityAlias,
 )
 
-from .exceptions import QualityNotFoundError
+from ..exceptions import QualityNotFoundError
 
 
 def is_youtube_audio_codec(acodec: str) -> bool:

@@ -3,21 +3,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional, TypedDict, Union, cast
 
-# Tipo de evento registrado
+# Tipos de eventos y fuentes
 EventType = Literal["download", "upload", "publication"]
 Source = Literal["yt_downloader", "uploader", "orchestrator"]
 
 
-def get_inodo(path: Union[str, Path]) -> str:
-    path = Path(path)
-    return f"{path.stat().st_dev}-{path.stat().st_ino}"
-
-
+# Tipos de registro
 class RegisterEntry(TypedDict):
     event: EventType
     episode: str
     timestamp: str
-    source: Source  # quien realiza la acción (ej: "yt_downloader", "uploader")
+    source: Source
     file_path: str
 
 
@@ -43,94 +39,104 @@ RegistryEntry = Union[RegisterEntry, RegisterVideoUpload, RegisterPublication]
 REGISTRY_FILE = Path.cwd() / "registry/download_registry.json"
 
 
-def _load_registry() -> list[RegistryEntry]:
-    if REGISTRY_FILE.exists():
-        try:
-            with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            print(f"Error leyendo el archivo de registro: {e}")
-            return []
-    return []
+class RegistryManager:
+    def __init__(self, registry_file: Optional[Union[str, Path]] = None):
+        self.registry_file = (
+            REGISTRY_FILE if registry_file is None else Path(registry_file)
+        )
+        self.registry_file.parent.mkdir(parents=True, exist_ok=True)
 
+    def _load(self) -> list[RegistryEntry]:
+        if self.registry_file.exists():
+            try:
+                with open(self.registry_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except json.JSONDecodeError as e:
+                print(f"Error leyendo el archivo de registro: {e}")
+        return []
 
-def _save_registry(
-    data: list[RegistryEntry],
-) -> None:
-    REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(REGISTRY_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    def _save(self, data: list[RegistryEntry]) -> None:
+        with open(self.registry_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
 
+    def _get_inodo(self, path: Union[str, Path]) -> str:
+        path = Path(path)
+        return f"{path.stat().st_dev}-{path.stat().st_ino}"
 
-def register_episode_downloaded(episode: str, file_path: Union[str, Path]):
+    def register_episode_downloaded(
+        self, episode: str, file_path: Union[str, Path]
+    ) -> None:
+        file_path = Path(file_path).resolve()
+        entry: RegisterEntry = {
+            "event": "download",
+            "episode": episode,
+            "timestamp": datetime.now().isoformat(),
+            "source": "yt_downloader",
+            "file_path": str(file_path),
+        }
+        data = self._load()
+        data.append(entry)
+        self._save(data)
 
-    file_path = Path(file_path).resolve() if isinstance(file_path, str) else file_path
+    def register_video_uploaded(
+        self, message_id: int, chat_id: int, video_path: Union[str, Path]
+    ) -> None:
+        video_path = Path(video_path).resolve()
+        inodo = self._get_inodo(video_path)
+        entry: RegisterVideoUpload = {
+            "event": "upload",
+            "source": "uploader",
+            "inodo": inodo,
+            "timestamp": datetime.now().isoformat(),
+            "file_path": str(video_path),
+            "message_id": message_id,
+            "chat_id": chat_id,
+        }
+        data = self._load()
+        data.append(entry)
+        self._save(data)
 
-    data = _load_registry()
-    entry: RegisterEntry = {
-        "event": "download",
-        "episode": episode,
-        "timestamp": datetime.now().isoformat(),
-        "source": "yt_downloader",
-        "file_path": str(file_path),
-    }
-    data.append(entry)
-    _save_registry(data)
+    def register_episode_publication(self, episode: str) -> None:
+        entry: RegisterPublication = {
+            "event": "publication",
+            "episode_number": episode,
+            "episode_day": str(datetime.now().date()),
+            "timestamp": datetime.now().isoformat(),
+            "source": "orchestrator",
+        }
+        data = self._load()
+        data.append(entry)
+        self._save(data)
+        print(f"Registro de publicación para el episodio {episode} guardado.")
 
+    def was_episode_downloaded(self, episode: str) -> bool:
+        data = self._load()
+        return any(
+            d.get("episode") == episode and d.get("event") == "download" for d in data
+        )
 
-def register_video_uploaded(
-    message_id: int, chat_id: int, video_path: Union[str, Path]
-) -> None:
-    video_path = Path(video_path) if isinstance(video_path, str) else video_path
-    inodo = get_inodo(video_path)
+    def was_video_uploaded(self, video_path: Union[str, Path]) -> bool:
+        video_path = Path(video_path).resolve()
+        inodo = self._get_inodo(video_path)
+        data = self._load()
+        return any(d.get("inodo") == inodo and d.get("event") == "upload" for d in data)
 
-    data = _load_registry()
-    entry: RegisterVideoUpload = {
-        "inodo": inodo,
-        "event": "upload",
-        "source": "uploader",
-        "timestamp": datetime.now().isoformat(),
-        "file_path": str(video_path.resolve()),
-        "message_id": message_id,
-        "chat_id": chat_id,
-    }
-    data.append(entry)
-    _save_registry(data)
+    def was_episode_published(self, episode_number: str) -> bool:
+        """Verifica si un episodio ha sido publicado."""
+        data = self._load()
+        return any(
+            d.get("episode_number") == episode_number
+            and d.get("event") == "publication"
+            for d in data
+        )
 
-
-def register_episode_publication(episode: str):
-    data = _load_registry()
-    entry: RegisterPublication = {
-        "event": "publication",
-        "episode_number": episode,
-        "episode_day": str(datetime.now().date()),
-        "timestamp": datetime.now().isoformat(),
-        "source": "orchestrator",
-    }
-    data.append(entry)
-    _save_registry(data)
-    print(f"Registro de publicación para el episodio {episode} guardado.")
-
-
-def was_episode_downloaded(episode: str) -> bool:
-    data = _load_registry()
-    event = "download"
-    return any(d.get("episode") == episode and d.get("event") == event for d in data)
-
-
-def was_video_uploaded(video_path) -> bool:
-    data = _load_registry()
-    event = "upload"
-    video_path = Path(video_path) if isinstance(video_path, str) else video_path
-    inodo = get_inodo(video_path)
-    return any(d.get("inodo") == inodo and d.get("event") == event for d in data)
-
-
-def get_video_uploaded(video_path) -> Optional[RegisterVideoUpload]:
-    data = _load_registry()
-    video_path = Path(video_path) if isinstance(video_path, str) else video_path
-    inodo = get_inodo(video_path)
-    for entry in data:
-        if entry.get("inodo") == inodo and entry.get("event") == "upload":
-            return cast(RegisterVideoUpload, entry)
-    return None
+    def get_video_uploaded(self, video_path: Union[str, Path]) -> RegisterVideoUpload:
+        video_path = Path(video_path).resolve()
+        inodo = self._get_inodo(video_path)
+        data = self._load()
+        for entry in data:
+            if entry.get("inodo") == inodo and entry.get("event") == "upload":
+                return cast(RegisterVideoUpload, entry)
+        raise ValueError(
+            f"No se encontró el registro de carga para el video: {video_path}"
+        )

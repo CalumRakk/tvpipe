@@ -3,22 +3,34 @@ from datetime import datetime, time, timedelta
 from typing import Optional
 
 from proyect_x.caracoltv import CaracolTV
+from proyect_x.shared.download_register import RegistryManager
 from proyect_x.yt_downloader.core.common import sleep_progress
-from proyect_x.yt_downloader.core.episode import get_episode_of_the_day
+from proyect_x.yt_downloader.core.episode import (
+    get_episode_number,
+    get_episode_of_the_day,
+    get_metadata,
+)
+from proyect_x.yt_downloader.exceptions import ScheduleNotFound
 from proyect_x.yt_downloader.schemas import RELEASE_MODE
 
 logger = logging.getLogger(__name__)
+register = RegistryManager()
 
 
-def should_skip_today():
+def should_skip_today(url):
     """Determina si se debe omitir la descarga del capítulo hoy."""
     today = datetime.now()
     if today.weekday() >= 5:
         logger.info("Hoy es fin de semana. No hay capítulo.")
         return True
-    # if already_downloaded_today():
-    #     logger.info("✅ El capítulo de hoy ya fue descargado.")
-    #     return True
+
+    metadata = get_metadata(url)
+    title = metadata["title"]
+    number = get_episode_number(title)
+
+    if register.was_episode_published(number):
+        logger.info("✅ El capítulo de hoy ya fue descargado.")
+        return True
     return False
 
 
@@ -42,7 +54,11 @@ def get_release_time(config) -> datetime:
         if schedule:
             release_time = schedule["endtime"] + timedelta(minutes=5)
             return release_time
-        raise ValueError("No se encontró la programación del desafío.")
+        else:
+            logger.warning("No se pudo obtener la hora de lanzamiento del desafío.")
+            raise ScheduleNotFound(
+                "No se pudo obtener la hora de lanzamiento del desafío."
+            )
     else:
         release_time = datetime.combine(datetime.now().date(), config.release_hour)
     return release_time
@@ -70,17 +86,25 @@ def wait_release(mode):
 def get_episode_url(config) -> str:
     url = None
     while url is None:
-        if should_skip_today():
-            wait_end_of_day()
-            continue
+        try:
+            if wait_until_release(config) and config.mode is RELEASE_MODE.AUTO:
+                # Si mode está en auto, al finalizar la espera del lanzamiento,
+                # se vuelve a obtener la hora de lanzamiento para casos donde la programación pueda cambiar.
+                wait_release(config)
+                continue
 
-        if wait_until_release(config) and config.mode is RELEASE_MODE.AUTO:
-            # Si mode está en auto, al finalizar la espera del lanzamiento,
-            # se vuelve a obtener la hora de lanzamiento para casos donde la programación pueda cambiar.
-            wait_release(config)
-            continue
+            url = get_episode_of_the_day()
+            if url is None:
+                sleep_progress(120)
 
-        url = get_episode_of_the_day()
-        if url is None:
-            sleep_progress(120)
+            if should_skip_today(url):
+                url = None
+                wait_end_of_day()
+                continue
+        except ScheduleNotFound as e:
+            logger.error(f"Error al obtener la programación: {e}")
+            wait_one_hour = datetime.now() + timedelta(hours=1)
+            logger.info(f"Esperando hasta {wait_one_hour.strftime('%I:%M %p')}")
+            sleep_progress(3600)  # Espera una hora antes de volver a intentar
+            continue
     return url

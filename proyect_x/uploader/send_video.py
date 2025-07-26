@@ -11,12 +11,7 @@ from pyrogram.errors.exceptions import BadRequest
 from pyrogram.types import Chat, InputMediaVideo, Message
 from tqdm import tqdm  # type: ignore
 
-from proyect_x.shared.download_register import (
-    RegisterVideoUpload,
-    get_video_uploaded,
-    register_video_uploaded,
-    was_video_uploaded,
-)
+from proyect_x.shared.download_register import RegistryManager
 from proyect_x.uploader.settings import AppSettings
 from proyect_x.uploader.utils import get_video_metadata
 
@@ -121,12 +116,12 @@ def _process_single_video(
     total: int,
 ):
     video_path = Path(video.path)
-
-    if was_video_uploaded(video_path):
+    register = RegistryManager()
+    if register.was_video_uploaded(video_path):
         logger.info(
             f"El video {video_path.name} ya fue registrado. Verificando si ya fue enviado."
         )
-        data = cast(RegisterVideoUpload, get_video_uploaded(video_path))
+        data = register.get_video_uploaded(video_path)
         message = cast(
             Message, client.get_messages(data["chat_id"], data["message_id"])
         )
@@ -162,7 +157,7 @@ def _process_single_video(
                 disable_notification=True,
             ),
         )
-        register_video_uploaded(
+        register.register_video_uploaded(
             message_id=message.id,
             chat_id=chat_id,
             video_path=video.path,
