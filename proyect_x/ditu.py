@@ -4,7 +4,7 @@ import logging
 import os
 import time
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Dict, Generator, List, Set, TypedDict
 
@@ -52,15 +52,28 @@ class Schedule(BaseModel):
     episode_id: int
 
 
+def get_day_range_timestamps_ms() -> tuple[str, str]:
+
+    start_day = time(0, 0, 0)  # 00:00:00
+    end_day = time(23, 59, 59, 999000)  # 23:59:59.999
+    today = datetime.now().date()
+    start_dt = datetime.combine(today, start_day)  # 00:00:00
+    end_dt = datetime.combine(today, end_day) + timedelta(hours=3)  # 23:59:59.999
+    start_ts_ms = int(start_dt.timestamp() * 1000)
+    end_ts_ms = int(end_dt.timestamp() * 1000)
+    return str(start_ts_ms), str(end_ts_ms)
+
+
 class Ditu:
 
-    def _fetch_all_schedules(self, url, headers, params):
+    def _fetch_all_schedules(self):
+        start_ms, end_ms = get_day_range_timestamps_ms()
         url = "https://varnish-prod.avscaracoltv.com/AGL/1.6/A/ENG/ANDROID/ALL/TRAY/EPG"
         params = {
             "orderBy": "orderId",
             "sortOrder": "asc",
-            "filter_startTime": "1752978600000",
-            "filter_endTime": "1753000200000",
+            "filter_startTime": start_ms,
+            "filter_endTime": end_ms,
         }
         headers = {
             "User-Agent": "okhttp/4.12.0",
@@ -68,12 +81,12 @@ class Ditu:
         }
 
         response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
         return response.json()
 
     def _extract_data_ditu(self):
-        for data in self._fetch_all_schedules(MPD_URL, HEADERS, PARAMS)["resultObj"][
-            "containers"
-        ]:
+        json_data = self._fetch_all_schedules()
+        for data in json_data["resultObj"]["containers"]:
             if data["id"] == "43":  # channelId= Desafio siglo xxi
                 return data
 
