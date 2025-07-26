@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, time, timedelta
-from typing import Optional
+from typing import Optional, cast
 
 from proyect_x.caracoltv import CaracolTV
 from proyect_x.shared.download_register import RegistryManager
@@ -17,13 +17,17 @@ logger = logging.getLogger(__name__)
 register = RegistryManager()
 
 
-def should_skip_today(url):
+def should_skip_today():
     """Determina si se debe omitir la descarga del capítulo hoy."""
     today = datetime.now()
     if today.weekday() >= 5:
         logger.info("Hoy es fin de semana. No hay capítulo.")
         return True
+    return False
 
+
+def was_episode_published(url: str) -> bool:
+    """Verifica si el episodio ya fue publicado."""
     metadata = get_metadata(url)
     title = metadata["title"]
     number = get_episode_number(title)
@@ -87,6 +91,9 @@ def get_episode_url(config) -> str:
     url = None
     while url is None:
         try:
+            if should_skip_today():
+                wait_end_of_day()
+                continue
             if wait_until_release(config) and config.mode is RELEASE_MODE.AUTO:
                 # Si mode está en auto, al finalizar la espera del lanzamiento,
                 # se vuelve a obtener la hora de lanzamiento para casos donde la programación pueda cambiar.
@@ -96,15 +103,19 @@ def get_episode_url(config) -> str:
             url = get_episode_of_the_day()
             if url is None:
                 sleep_progress(120)
-
-            if should_skip_today(url):
-                url = None
-                wait_end_of_day()
                 continue
+            elif was_episode_published(url):
+                logger.info(
+                    "El capítulo de hoy ya fue descargado. Esperando al siguiente."
+                )
+                wait_end_of_day()
+                url = None
+                continue
+
         except ScheduleNotFound as e:
             logger.error(f"Error al obtener la programación: {e}")
-            wait_one_hour = datetime.now() + timedelta(hours=1)
-            logger.info(f"Esperando hasta {wait_one_hour.strftime('%I:%M %p')}")
-            sleep_progress(3600)  # Espera una hora antes de volver a intentar
+            wait_10_minutes = datetime.now() + timedelta(minutes=10)
+            logger.info(f"Esperando hasta {wait_10_minutes.strftime('%I:%M %p')}")
+            sleep_progress((wait_10_minutes - datetime.now()).total_seconds())
             continue
     return url
