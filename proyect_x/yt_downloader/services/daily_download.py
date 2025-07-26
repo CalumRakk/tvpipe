@@ -5,7 +5,7 @@ from typing import cast
 
 import requests
 
-from proyect_x.shared.download_register import EventType, register_event
+from proyect_x.shared.download_register import register_episode_downloaded
 from proyect_x.yt_downloader.core.download import merge_with_ffmpeg
 from proyect_x.yt_downloader.core.episode import get_episode_number
 from proyect_x.yt_downloader.core.formats import extract_files_from_download_result
@@ -97,7 +97,7 @@ def postprocess_and_register(
 
         if not output.exists():
             merge_with_ffmpeg(video_path, audio_path, str(output))
-            register_event(
+            register_episode_downloaded(
                 episode=number,
                 event="download",
                 file_path=output,

@@ -1,11 +1,16 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, TypedDict, Union
+from typing import Literal, Optional, TypedDict, Union, cast
 
 # Tipo de evento registrado
-EventType = Literal["download", "upload"]
-Source = Literal["yt_downloader", "uploader"]
+EventType = Literal["download", "upload", "publication"]
+Source = Literal["yt_downloader", "uploader", "orchestrator"]
+
+
+def get_inodo(path: Union[str, Path]) -> str:
+    path = Path(path)
+    return f"{path.stat().st_dev}-{path.stat().st_ino}"
 
 
 class RegisterEntry(TypedDict):
@@ -26,47 +31,55 @@ class RegisterVideoUpload(TypedDict):
     chat_id: int
 
 
-REGISTRY_FILE = Path("registry/download_registry.json")
+class RegisterPublication(TypedDict):
+    event: EventType
+    episode_number: str
+    episode_day: str
+    timestamp: str
+    source: Source
 
 
-def _load_registry() -> list[RegisterEntry | RegisterVideoUpload]:
+RegistryEntry = Union[RegisterEntry, RegisterVideoUpload, RegisterPublication]
+REGISTRY_FILE = Path.cwd() / "registry/download_registry.json"
+
+
+def _load_registry() -> list[RegistryEntry]:
     if REGISTRY_FILE.exists():
-        with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(REGISTRY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            print(f"Error leyendo el archivo de registro: {e}")
+            return []
     return []
 
 
-def _save_registry(data: list[RegisterEntry | RegisterVideoUpload]) -> None:
+def _save_registry(
+    data: list[RegistryEntry],
+) -> None:
     REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(REGISTRY_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def register_event(
-    episode: str, event: EventType, file_path: Union[str, Path], source: Source
-):
-    """
-    Registra un evento (descarga o subida) de un episodio en el archivo JSON.
-    """
+def register_episode_downloaded(episode: str, file_path: Union[str, Path]):
     data = _load_registry()
     entry: RegisterEntry = {
-        "event": event,
+        "event": "download",
         "episode": episode,
         "timestamp": datetime.now().isoformat(),
-        "source": source,
+        "source": "yt_downloader",
         "file_path": str(file_path),
     }
     data.append(entry)
     _save_registry(data)
 
 
-def register_video_upload(message_id, chat_id, video_path):
-    """
-    Registra un evento (descarga o subida) de un episodio en el archivo JSON.
-    """
-
+def register_video_uploaded(
+    message_id: int, chat_id: int, video_path: Union[str, Path]
+) -> None:
     video_path = Path(video_path) if isinstance(video_path, str) else video_path
-    inodo = f"{video_path.stat().st_dev}-{video_path.stat().st_ino}"
+    inodo = get_inodo(video_path)
 
     data = _load_registry()
     entry: RegisterVideoUpload = {
@@ -82,38 +95,39 @@ def register_video_upload(message_id, chat_id, video_path):
     _save_registry(data)
 
 
-def was_episode_registered(episode: str) -> bool:
-    """
-    Verifica si ya existe un evento registrado para un episodio.
-    """
+def register_episode_publication(episode: str):
+    data = _load_registry()
+    entry: RegisterPublication = {
+        "event": "publication",
+        "episode_number": episode,
+        "episode_day": str(datetime.now().date()),
+        "timestamp": datetime.now().isoformat(),
+        "source": "orchestrator",
+    }
+    data.append(entry)
+    _save_registry(data)
+    print(f"Registro de publicación para el episodio {episode} guardado.")
+
+
+def was_episode_downloaded(episode: str) -> bool:
     data = _load_registry()
     event = "download"
     return any(d.get("episode") == episode and d.get("event") == event for d in data)
 
 
-def was_videopath_registered(video_path):
+def was_video_uploaded(video_path) -> bool:
     data = _load_registry()
     event = "upload"
     video_path = Path(video_path) if isinstance(video_path, str) else video_path
-    inodo = f"{video_path.stat().st_dev}-{video_path.stat().st_ino}"
+    inodo = get_inodo(video_path)
     return any(d.get("inodo") == inodo and d.get("event") == event for d in data)
 
 
-def get_videopath_registered(video_path):
-    """
-    Devuelve el registro de un video por su ruta.
-    """
+def get_video_uploaded(video_path) -> Optional[RegisterVideoUpload]:
     data = _load_registry()
     video_path = Path(video_path) if isinstance(video_path, str) else video_path
-    inodo = f"{video_path.stat().st_dev}-{video_path.stat().st_ino}"
+    inodo = get_inodo(video_path)
     for entry in data:
         if entry.get("inodo") == inodo and entry.get("event") == "upload":
-            return entry
+            return cast(RegisterVideoUpload, entry)
     return None
-
-
-def get_all_events(event: EventType) -> list[RegisterEntry]:
-    """
-    Devuelve todos los eventos registrados de un tipo específico (download/upload).
-    """
-    return [e for e in _load_registry() if e["event"] == event]
