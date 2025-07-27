@@ -18,6 +18,13 @@ def get_day_range_timestamps_ms() -> tuple[str, str]:
     return str(start_ts_ms), str(end_ts_ms)
 
 
+HEADERS = {
+    "Restful": "yes",
+    "Accept-Encoding": "gzip, deflate, br",
+    "User-Agent": "okhttp/4.12.0",
+}
+
+
 class Ditu:
 
     def _fetch_raw_channels_schedule(self) -> RawTVScheduleResponse:
@@ -111,3 +118,13 @@ class Ditu:
         if schedule:
             return schedule
         raise ValueError("No se encontró programación para el canal Caracol TV")
+
+    # def get_live_program(self, channel_info: ChannelInfo) -> Optional[SimpleSchedule]:
+    #     url = "https://varnish-prod.avscaracoltv.com/AGL/1.6/A/ENG/ANDROID/ALL/TRAY/SEARCH/PROGRAM"
+    #     params = {
+    #         "filter_channelIds": str(channel_info["channelId"]),
+    #         "filter_airingTime": "now",
+    #     }
+    #     response = requests.get(url, params=params, headers=HEADERS)
+    #     response.raise_for_status()
+    #     data = response.json()
