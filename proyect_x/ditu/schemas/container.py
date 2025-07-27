@@ -6,8 +6,8 @@ from .metadata import EmocionItem, ProgramMetadata
 
 class Container(TypedDict):
     id: str
-    layout: str  # Ej: "CHANNEL_ITEM"
-    metadata: Dict[str, int]  # channelId
+    layout: str
+    metadata: Dict[str, int]
     containers: List[EmocionItem]
 
 
@@ -23,7 +23,7 @@ class ContainerFilter(TypedDict):
     actions: List[Action]
     metadata: ProgramMetadata
     channel: ChannelInfo
-    assets: List  # Puedes definir esto si llegan datos
+    assets: List
 
 
 class ResultObj(TypedDict):
@@ -34,3 +34,29 @@ class ResultObj(TypedDict):
 class ResultObjFilter(TypedDict):
     total: int
     containers: List[ContainerFilter]
+
+
+class AssetEntitlement(TypedDict):
+    assetId: int
+    videoType: str
+    assetType: str
+    assetName: str
+    rights: str
+
+
+class EntitlementEntitlement(TypedDict):
+    isContentOOHBlocked: bool
+    isPlatformBlacklisted: bool
+    assets: List[AssetEntitlement]
+
+
+class ContainerEntitlement(TypedDict):
+    id: str
+    layout: str
+    metadata: dict  # Vacío en este ejemplo. Cambiar si llega con estructura.
+    entitlement: EntitlementEntitlement
+
+
+class ResultObjEntitlement(TypedDict):
+    total: int
+    containers: List[ContainerEntitlement]

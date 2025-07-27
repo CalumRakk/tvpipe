@@ -16,3 +16,8 @@ class ExtendedMetadata(TypedDict, total=False):
     contentSubType: str
     tagValue: Optional[str]
     linearDescriptionFormat: Optional[List[str]]
+
+
+class ResultObjDash(TypedDict):
+    src: str
+    token: str

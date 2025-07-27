@@ -1,0 +1,56 @@
+{
+    "resultCode": "OK",
+    "message": "",
+    "errorDescription": "200-10000",
+    "resultObj": {
+        "total": 1,
+        "containers": [
+            {
+                "id": "304471",
+                "layout": "CONTENT_ITEM",
+                "actions": [
+                    {
+                        "key": "onClick",
+                        "uri": "/PAGE/DETAILS/PROGRAM/304471",
+                        "targetType": "PAGE"
+                    }
+                ],
+                "metadata": {
+                    "contentId": 304471,
+                    "contentType": "PROGRAM",
+                    "longDescription": "Descripci\u00f3n no disponible",
+                    "externalId": "389516",
+                    "title": "Suite Ditu y Rinc\u00f3n de los Castigos ",
+                    "duration": 230,
+                    "airingStartTime": 1753639800000,
+                    "airingEndTime": 1753653600000,
+                    "episodeId": 1,
+                    "episodeTitle": "(Repetici\u00f3n)",
+                    "season": 1,
+                    "starRating": 0,
+                    "isRecordable": false,
+                    "isStartOver": false,
+                    "isCatchUp": false,
+                    "pcLevel": 0,
+                    "pcExtendedRatings": [],
+                    "isPlatformBlacklisted": false,
+                    "extendedMetadata": {
+                        "tagValue": "Reality",
+                        "linearDescriptionFormat": [
+                            "EPISODE_NAME"
+                        ],
+                        "contentType": "PROGRAM",
+                        "contentSubType": "EPISODE"
+                    },
+                    "contentOptions": []
+                },
+                "channel": {
+                    "channelId": 43,
+                    "channelName": "El Desaf\u00edo"
+                },
+                "assets": []
+            }
+        ]
+    },
+    "systemTime": 1753642018227
+}

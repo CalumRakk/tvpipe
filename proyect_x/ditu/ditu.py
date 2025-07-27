@@ -1,9 +1,16 @@
+import json
 from datetime import datetime, time, timedelta
+from pathlib import Path
 from typing import List, Optional
 
 import requests
 
 from proyect_x.ditu.schemas import ChannelInfo, RawTVScheduleResponse, SimpleSchedule
+from proyect_x.ditu.schemas.filter import (
+    DashManifestResponse,
+    EntitlementLiveChannel,
+    FilterResponse,
+)
 
 
 def get_day_range_timestamps_ms() -> tuple[str, str]:
@@ -119,12 +126,40 @@ class Ditu:
             return schedule
         raise ValueError("No se encontró programación para el canal Caracol TV")
 
-    # def get_live_program(self, channel_info: ChannelInfo) -> Optional[SimpleSchedule]:
-    #     url = "https://varnish-prod.avscaracoltv.com/AGL/1.6/A/ENG/ANDROID/ALL/TRAY/SEARCH/PROGRAM"
-    #     params = {
-    #         "filter_channelIds": str(channel_info["channelId"]),
-    #         "filter_airingTime": "now",
-    #     }
-    #     response = requests.get(url, params=params, headers=HEADERS)
-    #     response.raise_for_status()
-    #     data = response.json()
+    def get_live_program(self, channel_id: int) -> FilterResponse:
+        url = "https://varnish-prod.avscaracoltv.com/AGL/1.6/A/ENG/ANDROID/ALL/TRAY/SEARCH/PROGRAM"
+        params = {
+            "filter_channelIds": str(channel_id),
+            "filter_airingTime": "now",
+        }
+        response = requests.get(url, params=params, headers=HEADERS)
+        response.raise_for_status()
+        return response.json()
+
+    def _get_entitlements_for_live_channel(
+        self, channel_id: int
+    ) -> EntitlementLiveChannel:
+        """Obtiene la información de derechos de reproducción ("entitlement") y los assets disponibles (por ejemplo, LIVE_HD) para una transmisión en vivo del canal especificado. Sirve para determinar si el canal puede reproducirse y qué assets están disponibles, incluyendo su assetId, que puede usarse en otro endpoint (como el de VIDEOURL).
+
+        Nota: No se usa de momento.
+        """
+        url = "https://varnish-prod.avscaracoltv.com/AGL/1.6/A/ENG/ANDROID/ALL/CONTENT/USERDATA/LIVE/20"
+        params = {
+            "filter_channelIds": str(channel_id),
+            "filter_entitlementType": "live",
+        }
+        response = requests.get(url, params=params, headers=HEADERS)
+        response.raise_for_status()
+        return response.json()
+
+    def _get_dash_manifest_for_live_channel(
+        self, channel_id: int
+    ) -> DashManifestResponse:
+        """Obtiene el DASH manifest para una transmisión en vivo del canal especificado. Este endpoint es útil para obtener el assetId necesario para reproducir el canal en vivo.
+
+        Nota: No se usa de momento.
+        """
+        url = f"https://varnish-prod.avscaracoltv.com/AGL/1.6/A/ENG/ANDROID/ALL/CONTENT/VIDEOURL/LIVE/{channel_id}/10"
+        response = requests.get(url, headers=HEADERS)
+        response.raise_for_status()
+        return response.json()

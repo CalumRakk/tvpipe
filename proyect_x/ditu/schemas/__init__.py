@@ -1,13 +1,6 @@
 from .common import ChannelInfo, CopyProtection, ExtendedMetadata
-from .container import (
-    ChannelContainerWithEntitlement,
-    Container,
-    ContainerFilter,
-    ResultObj,
-    ResultObjChannelEntitlement,
-    ResultObjFilter,
-)
-from .filter import ChannelEntitlementResponse, FilterResponse
+from .container import Container, ContainerFilter, ResultObj, ResultObjFilter
+from .filter import FilterResponse
 from .metadata import EmocionItem, ProgramMetadata
 from .schedule import RawTVScheduleResponse, SimpleSchedule
 
@@ -24,10 +17,4 @@ __all__ = [
     "RawTVScheduleResponse",
     "SimpleSchedule",
     "FilterResponse",
-]
-
-__all__ += [
-    "ChannelContainerWithEntitlement",
-    "ResultObjChannelEntitlement",
-    "ChannelEntitlementResponse",
 ]

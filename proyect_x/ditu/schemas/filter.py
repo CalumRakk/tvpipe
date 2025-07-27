@@ -1,6 +1,8 @@
 from typing import TypedDict
 
-from .container import ResultObjFilter
+from proyect_x.ditu.schemas.common import ResultObjDash
+
+from .container import ResultObjEntitlement, ResultObjFilter
 
 
 class FilterResponse(TypedDict):
@@ -8,4 +10,20 @@ class FilterResponse(TypedDict):
     message: str
     errorDescription: str
     resultObj: ResultObjFilter
+    systemTime: int
+
+
+class EntitlementLiveChannel(TypedDict):
+    resultCode: str
+    message: str
+    errorDescription: str
+    resultObj: ResultObjEntitlement
+    systemTime: int
+
+
+class DashManifestResponse(TypedDict):
+    resultCode: str
+    message: str
+    errorDescription: str
+    resultObj: ResultObjDash
     systemTime: int
