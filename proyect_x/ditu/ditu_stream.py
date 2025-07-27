@@ -1,27 +1,21 @@
-# _live_dash_downloader.py
-
 import logging
 import os
-import time
 import xml.etree.ElementTree as ET
-from datetime import datetime, time, timedelta
 from pathlib import Path
+from time import sleep
 from typing import Dict, Generator, List, Set, TypedDict
 
 import requests
-from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 # ============================
-# CONFIGURACIÓN
-
 OUTPUT_DIR_VIDEO = "output_dash/video"
 OUTPUT_DIR_AUDIO = "output_dash/audio"
 REPRESENTATION_ID_VIDEO = "3"
 REPRESENTATION_ID_AUDIO = "4"
-
 # ============================
 
-logger = logging.getLogger(__name__)
 MPD_URL = "https://d1kkcfjl98zuzm.cloudfront.net/v1/dash/f4489bb8f722c0b62ee6ef7424a5804a17ae814a/El-Desafio/out/v1/ab964e48d2c041579637cfe179ff2359/index.mpd"
 PARAMS: Dict[str, str] = {
     "ads.deviceType": "mobile",
@@ -35,98 +29,6 @@ HEADERS: Dict[str, str] = {
     "Accept-Encoding": "gzip, deflate, br",
     "User-Agent": "okhttp/4.12.0",
 }
-
-
-class Schedule(BaseModel):
-    start_time: datetime
-    end_time: datetime
-    title: str
-    start_time_12hours: str
-    end_time_12hours: str
-    content_id: int
-    long_description: str
-    episode_title: str
-    episode_number: int
-    season: int
-    duration: int
-    episode_id: int
-
-
-def get_day_range_timestamps_ms() -> tuple[str, str]:
-
-    start_day = time(0, 0, 0)  # 00:00:00
-    end_day = time(23, 59, 59, 999000)  # 23:59:59.999
-    today = datetime.now().date()
-    start_dt = datetime.combine(today, start_day)  # 00:00:00
-    end_dt = datetime.combine(today, end_day) + timedelta(hours=3)  # 23:59:59.999
-    start_ts_ms = int(start_dt.timestamp() * 1000)
-    end_ts_ms = int(end_dt.timestamp() * 1000)
-    return str(start_ts_ms), str(end_ts_ms)
-
-
-class Ditu:
-
-    def _fetch_all_schedules(self):
-        start_ms, end_ms = get_day_range_timestamps_ms()
-        url = "https://varnish-prod.avscaracoltv.com/AGL/1.6/A/ENG/ANDROID/ALL/TRAY/EPG"
-        params = {
-            "orderBy": "orderId",
-            "sortOrder": "asc",
-            "filter_startTime": start_ms,
-            "filter_endTime": end_ms,
-        }
-        headers = {
-            "User-Agent": "okhttp/4.12.0",
-            "Accept-Encoding": "gzip, deflate, br",
-        }
-
-        response = requests.get(url, headers=headers, params=params)
-        response.raise_for_status()
-        return response.json()
-
-    def _extract_data_ditu(self):
-        json_data = self._fetch_all_schedules()
-        for data in json_data["resultObj"]["containers"]:
-            if data["id"] == "43":  # channelId= Desafio siglo xxi
-                return data
-
-    def get_schedule(self):
-        schedules = []
-        contents = self._extract_data_ditu()
-        if contents is None:
-            raise Exception("No se pudo obtener la programación")
-
-        for data in [i["metadata"] for i in contents["containers"]]:
-            start_time = datetime.fromtimestamp(data["airingStartTime"] / 1000)
-            end_time = datetime.fromtimestamp(data["airingEndTime"] / 1000)
-            title = data["title"].strip()
-            start_time_12hours = start_time.strftime("%Y-%m-%d %I:%M %p")
-            end_time_12hours = end_time.strftime("%Y-%m-%d %I:%M %p")
-            content_id = data["contentId"]
-            long_description = data["longDescription"].strip()
-            episode_title = data["episodeTitle"].strip()
-            episode_number = data["episodeNumber"]
-            season = data["season"]
-            duration = data["duration"]
-            episode_id = data["episodeId"]
-
-            schedules.append(
-                Schedule(
-                    start_time=start_time,
-                    end_time=end_time,
-                    title=title,
-                    start_time_12hours=start_time_12hours,
-                    end_time_12hours=end_time_12hours,
-                    content_id=content_id,
-                    long_description=long_description,
-                    episode_title=episode_title,
-                    episode_number=episode_number,
-                    season=season,
-                    duration=duration,
-                    episode_id=episode_id,
-                )
-            )
-        return schedules
 
 
 class MPDInfo(TypedDict):
@@ -265,7 +167,7 @@ class RepresentationDownloader:
                 self.downloaded_segment_numbers.add(seg_num)
 
 
-def main(folder_output: Path) -> Generator[None, None, None]:
+def ditu_main_yield(folder_output: Path) -> Generator[None, None, None]:
     """Función principal que ejecuta el bucle de descarga."""
 
     # Crear los objetos que gestionarán las descargas de video y audio
@@ -292,7 +194,7 @@ def main(folder_output: Path) -> Generator[None, None, None]:
             audio_downloader.process_segments_from_mpd(mpd_text)
 
             logger.info("\n🕒 Esperando 5 segundos para el próximo ciclo...")
-            time.sleep(5)
+            sleep(5)
             yield None
 
         except KeyboardInterrupt:
@@ -301,14 +203,8 @@ def main(folder_output: Path) -> Generator[None, None, None]:
         except requests.exceptions.RequestException as e:
             logger.info(f"❌ Error de red: {e}")
             logger.info("🕒 Reintentando en 10 segundos...")
-            time.sleep(5)
+            sleep(5)
         except Exception as e:
             logger.info(f"❌ Ocurrió un error inesperado: {e}")
             logger.info("🕒 Reintentando en 10 segundos...")
-            time.sleep(5)
-
-
-if __name__ == "__main__":
-    ditu = Ditu()
-    schedule = ditu.get_schedule()
-    print(schedule)
+            sleep(5)

@@ -33,3 +33,4 @@ ditu/
 scripts/
 digest.txt
 .env.test
+!proyect_x/ditu

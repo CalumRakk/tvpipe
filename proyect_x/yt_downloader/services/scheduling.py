@@ -39,6 +39,7 @@ def was_episode_published(url: str) -> bool:
 
 
 def wait_until_release(config):
+    # TODO: Corregir nombre de la función.
     """Espera hasta la hora de lanzamiento del capítulo (especificada en release_time)."""
     release_time = get_release_time(config)
     today = datetime.now()
