@@ -1,7 +1,14 @@
-from proyect_x.ditu.ditu import Ditu
+from proyect_x.ditu.ditu import DituStream
 
-ditu = Ditu()
+ditu = DituStream()
 
 
-response = ditu._get_dash_manifest_for_live_channel(43)
+response = ditu.get_schedule("desafio")
 print(response)
+
+
+# dash = Dash()
+# url = dash.get_live_channel_manifest(43)
+# mpd = dash.fetch_mpd(url)
+# qualities = dash._extract_qualities(mpd)
+# print(qualities)

@@ -1,16 +1,6 @@
 from datetime import datetime
-from typing import TypedDict
 
 from pydantic import BaseModel
-
-from .container import ResultObj
-
-
-class RawTVScheduleResponse(TypedDict):
-    resultCode: str
-    message: str
-    errorDescription: str
-    resultObj: ResultObj
 
 
 class SimpleSchedule(BaseModel):
