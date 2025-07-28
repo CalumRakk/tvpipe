@@ -1,0 +1,29 @@
+{
+    "resultCode": "OK",
+    "message": "",
+    "errorDescription": "200-10000",
+    "resultObj": {
+        "total": 1,
+        "containers": [
+            {
+                "id": "20",
+                "layout": "CHANNEL_ITEM",
+                "metadata": {},
+                "entitlement": {
+                    "isContentOOHBlocked": false,
+                    "isPlatformBlacklisted": false,
+                    "assets": [
+                        {
+                            "assetId": 10,
+                            "videoType": "HD",
+                            "assetType": "MASTER",
+                            "assetName": "LIVE_HD",
+                            "rights": "watch"
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "systemTime": 1753644712923
+}

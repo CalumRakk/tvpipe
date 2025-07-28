@@ -4,8 +4,8 @@ from pathlib import Path
 
 from unidecode import unidecode
 
+from ditu_stream import ditu_main_yield
 from proyect_x.ditu.ditu import Ditu
-from proyect_x.ditu.ditu_stream import ditu_main_yield
 from proyect_x.ditu.schemas import SimpleSchedule
 from proyect_x.logging_config import setup_logging
 from proyect_x.yt_downloader.core.common import sleep_progress

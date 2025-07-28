@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import List, Optional
 
 import requests
+from pyparsing import Union
+from unidecode import unidecode
 
 from proyect_x.ditu.schemas import ChannelInfo, RawTVScheduleResponse, SimpleSchedule
 from proyect_x.ditu.schemas.filter import (
@@ -153,7 +155,7 @@ class Ditu:
         return response.json()
 
     def _get_dash_manifest_for_live_channel(
-        self, channel_id: int
+        self, channel_id: Union[str, int]
     ) -> DashManifestResponse:
         """Obtiene el DASH manifest para una transmisión en vivo del canal especificado. Este endpoint es útil para obtener el assetId necesario para reproducir el canal en vivo.
 
@@ -163,3 +165,21 @@ class Ditu:
         response = requests.get(url, headers=HEADERS)
         response.raise_for_status()
         return response.json()
+
+    def get_schannel_info_by_name(self, channel_name: str) -> Optional[ChannelInfo]:
+        """
+        Obtiene la información del canal por su nombre.
+
+        Args:
+            channel_name: Nombre del canal a buscar.
+
+        Returns:
+            Un objeto ChannelInfo con la información del canal, o None si no se encuentra.
+        """
+        channels = self.get_all_channel_info()
+        for channel in channels:
+            if unidecode(channel["channelName"].lower()) == unidecode(
+                channel_name.lower()
+            ):
+                return ChannelInfo(**channel)
+        return None
