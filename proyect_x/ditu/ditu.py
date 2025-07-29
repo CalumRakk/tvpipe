@@ -1,4 +1,5 @@
 import logging
+import shutil
 import subprocess
 from pathlib import Path
 from time import sleep
@@ -49,7 +50,7 @@ class DituStream:
     ) -> Path:
         title_slug = unidecode(schedule.title.strip()).lower().replace(" ", ".")
         start = schedule.start_time.strftime("%Y_%m_%d.%I_%M.%p")
-        width = video_rep["width"]
+        width = video_rep["height"]
         folder_name = f"{title_slug}.capitulo.{schedule.episode_number}.ditu.live.{width}p.{start}"
         return base_output / folder_name
 
@@ -87,31 +88,35 @@ class DituStream:
     def capture_schedule(self, schedule: SimpleSchedule, output_dir: Union[str, Path]):
         url = self.dash.get_live_channel_manifest(schedule.channel_id)
         output_dir = Path(output_dir) if isinstance(output_dir, str) else output_dir
-
+        result = {
+            "video_init": None,
+            "video_segments": [],
+            "audio_init": None,
+            "audio_segments": [],
+        }
         for _ in range(5):
             mpd = self.dash.fetch_mpd(url)
             reps = self.dash.parse_mpd_representations(mpd)
 
-            video_rep = self._select_best_representation(reps, key="width")
+            video_rep = self._select_best_representation(reps, key="height")
 
             output = self._build_output_path(schedule, output_dir, video_rep)
 
             audio_rep = self._select_best_representation(reps, key="sampling_rate")
 
             video_init, video_segments = self._download_representation_segments(
-                video_rep, output / "segments"
+                video_rep, output / "video"
             )
+            result["video_init"] = video_init
+            result["video_segments"].extend(video_segments)
             audio_init, audio_segments = self._download_representation_segments(
-                audio_rep, output / "segments"
+                audio_rep, output / "audio"
             )
+            result["audio_init"] = audio_init
+            result["audio_segments"].extend(audio_segments)
 
             sleep(5)  # TODO: reemplazar por el valor recomendado del manifest
-        return {
-            "video_init": video_init,
-            "video_segments": video_segments,
-            "audio_init": audio_init,
-            "audio_segments": audio_segments,
-        }
+        return result
 
     def combine_and_merge(self, result: dict):
         folder = result["video_init"].parent
@@ -129,7 +134,7 @@ class DituStream:
                 with open(segment, "rb") as fp_segment:
                     fp.write(fp_segment.read())
 
-        output = folder / (folder.name + video_path.suffix)
+        output = folder.parent / (folder.name + video_path.suffix)
         cmd = [
             "ffmpeg",
             "-loglevel",
@@ -146,4 +151,7 @@ class DituStream:
             str(output),
         ]
         subprocess.run(cmd, check=True)
+
+        shutil.rmtree(str(folder))
+
         logger.info(f"Archivo final: {output}")

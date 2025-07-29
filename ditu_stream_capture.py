@@ -48,7 +48,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     ditu = DituStream()
-    channel_info = ditu.channel.get_info("caracol")
+    channel_info = ditu.channel.get_info("desafio")
     schedules = ditu.get_schedule(channel_info["channelId"])
     programs: List[SimpleSchedule] = [
         schedule
