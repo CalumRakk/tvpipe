@@ -1,11 +1,15 @@
+from proyect_x.ditu.api.dash import Dash
 from proyect_x.ditu.schemas.simple_schedule import SimpleSchedule
 
+from .api.channel import DituChannel
 from .api.schedule import DituSchedule
 
 
 class DituStream:
     def __init__(self):
         self.schedule = DituSchedule()
+        self.channel = DituChannel()
+        self.dash = Dash()
 
     def get_schedule(self, channel) -> list[SimpleSchedule]:
         """Obtiene la programación del dia de un canal de la TV.

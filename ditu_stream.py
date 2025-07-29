@@ -12,7 +12,14 @@ from proyect_x.ditu.ditu import Ditu
 
 logger = logging.getLogger(__name__)
 
+# ============================
+OUTPUT_DIR_VIDEO = "output_dash/video"
+OUTPUT_DIR_AUDIO = "output_dash/audio"
+REPRESENTATION_ID_VIDEO = "3"
+REPRESENTATION_ID_AUDIO = "4"
+# ============================
 
+MPD_URL = "https://d1kkcfjl98zuzm.cloudfront.net/v1/dash/f4489bb8f722c0b62ee6ef7424a5804a17ae814a/El-Desafio/out/v1/ab964e48d2c041579637cfe179ff2359/index.mpd"
 PARAMS: Dict[str, str] = {
     "ads.deviceType": "mobile",
     "ads.rdid": "05166e3c-d22e-4386-9d0a-6aadf1d5c62f",
@@ -119,7 +126,10 @@ class DituStream(Ditu):
 
     def _get_url_dash_manifest(self, channel_id: Union[str, int]):
         """
-        Obtiene la URL del manifiesto DASH para un canal en vivo.
+        Descarga el manifiesto DASH desde la URL especificada.
+
+        Returns:
+            El contenido del manifiesto como una cadena de texto.
         """
         response = self._get_dash_manifest_for_live_channel(channel_id)
         return response["resultObj"]["src"]
@@ -138,7 +148,7 @@ class DituStream(Ditu):
         response.raise_for_status()
         return response.text
 
-    def extract_qualities_from_mpd(self, mpd_text: str) -> List[Dict[str, str]]:
+    def extract_qualities(self, mpd_text: str) -> List[Dict[str, str]]:
         """
         Extrae las calidades de video y audio del MPD.
 
@@ -150,9 +160,7 @@ class DituStream(Ditu):
         """
         return get_qualities_from_mpd(mpd_text)
 
-    def extract_mdpinfo_from_text(
-        self, mpd_text: str, representation_id: str
-    ) -> MPDInfo:
+    def extract_mdpinfo(self, mpd_text: str, representation_id: str) -> MPDInfo:
         """
         Parsea el texto del MPD y extrae la información para un Representation ID específico.
 
@@ -183,7 +191,7 @@ class DituStream(Ditu):
         output_path.write_bytes(r.content)
         logger.info(f"✅ Descargado: {output_path}")
 
-    def download_mdpinfo(self, mdpinfo: dict, folder_output: Path) -> None:
+    def download_mdpinfo(self, mdpinfo, folder_output: Path) -> None:
         mime, ext = mdpinfo["mimetype"].split("/")
         folder_final = folder_output / mime
 
@@ -201,20 +209,165 @@ class DituStream(Ditu):
             if not seg_path.exists():
                 self._download_segment(seg_url, seg_path)
 
+    def yield_stream(self, quality: dict) -> Generator[None, None, None]:
+        """
+        Función principal que ejecuta el bucle de descarga.
+
+        Args:
+            folder_output: Ruta del directorio donde se guardarán los archivos descargados.
+        """
+
+        logger.info("🚀 Iniciando descarga de stream en vivo...")
+
+        while True:
+            try:
+                logger.info("\n📥 Actualizando MPD...")
+                mpd_text = self._download_dash_manifest(MPD_URL)
+
+                logger.info(f"--- Procesando Video (ID: {REPRESENTATION_ID_VIDEO}) ---")
+                video_downloader.process_segments_from_mpd(mpd_text)
+
+                logger.info(f"--- Procesando Audio (ID: {REPRESENTATION_ID_AUDIO}) ---")
+                audio_downloader.process_segments_from_mpd(mpd_text)
+
+                logger.info("\n🕒 Esperando 5 segundos para el próximo ciclo...")
+                sleep(5)
+                yield None
+
+            except KeyboardInterrupt:
+                logger.info("\n⏹️ Proceso cancelado por el usuario.")
+                break
+            except requests.exceptions.RequestException as e:
+                logger.info(f"❌ Error de red: {e}")
+                logger.info("🕒 Reintentando en 7 segundos...")
+                sleep(10)
+            except Exception as e:
+                logger.info(f"❌ Ocurrió un error inesperado: {e}")
+                logger.info("🕒 Reintentando en 7 segundos...")
+                sleep(10)
+
+
+def download_mpd(url: str, headers: Dict[str, str], params: Dict[str, str]) -> str:
+    """
+    Descarga el archivo de manifiesto MPD.
+
+    Args:
+        url: La URL del manifiesto MPD.
+        headers: Las cabeceras HTTP para la petición.
+        params: Los parámetros de la query string para la petición.
+
+    Returns:
+        El contenido del MPD como una cadena de texto.
+    """
+    response = requests.get(url, headers=headers, params=params)
+    response.raise_for_status()
+    return response.text
+
+
+def download_file(url: str, output_path: str, headers: Dict[str, str]) -> None:
+    """
+    Descarga un archivo desde una URL a una ruta de destino.
+
+    Args:
+        url: La URL del archivo a descargar.
+        output_path: La ruta donde se guardará el archivo.
+        headers: Las cabeceras HTTP para la petición.
+    """
+    r = requests.get(url, headers=headers)
+    r.raise_for_status()
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "wb") as f:
+        f.write(r.content)
+    logger.info(f"✅ Descargado: {output_path}")
+
+
+class RepresentationDownloader:
+    """Gestiona la descarga de todos los segmentos para una única Representation."""
+
+    def __init__(
+        self, representation_id: str, output_dir: str, headers: Dict[str, str]
+    ):
+        self.representation_id = representation_id
+        self.output_dir = output_dir
+        self.headers = headers
+        self.downloaded_segment_numbers: Set[int] = set()
+        self.initial_segment_downloaded = False
+
+    def process_segments_from_mpd(self, mpd_text: str) -> None:
+        """
+        Parsea el MPD y descarga los segmentos nuevos para esta representación.
+
+        Args:
+            mpd_text: El contenido del MPD como una cadena de texto.
+        """
+        try:
+            mpd_info = parse_mpd_representation(mpd_text, self.representation_id)
+        except Exception as e:
+            logger.info(
+                f"⚠️ No se pudo procesar la representación {self.representation_id}: {e}"
+            )
+            return
+
+        # Descargar el segmento de inicialización si aún no se ha hecho
+        if not self.initial_segment_downloaded:
+            init_path = os.path.join(self.output_dir, "init.mp4")
+            download_file(mpd_info["init_url"], init_path, self.headers)
+            self.initial_segment_downloaded = True
+
+        # Descargar los segmentos de medios
+        for idx, _ in enumerate(mpd_info["segments"]):
+            seg_num = mpd_info["start_number"] + idx
+            if seg_num not in self.downloaded_segment_numbers:
+                seg_url = mpd_info["media_pattern"].replace("$Number$", str(seg_num))
+                seg_path = os.path.join(self.output_dir, f"segment_{seg_num}.mp4")
+
+                download_file(seg_url, seg_path, self.headers)
+                self.downloaded_segment_numbers.add(seg_num)
+
+
+def ditu_main_yield(folder_output: Path) -> Generator[None, None, None]:
+    """Función principal que ejecuta el bucle de descarga."""
+
+    # Crear los objetos que gestionarán las descargas de video y audio
+    output_video = str(folder_output / "video")
+    video_downloader = RepresentationDownloader(
+        REPRESENTATION_ID_VIDEO, output_video, HEADERS
+    )
+    output_audio = str(folder_output / "audio")
+    audio_downloader = RepresentationDownloader(
+        REPRESENTATION_ID_AUDIO, output_audio, HEADERS
+    )
+
+    logger.info("🚀 Iniciando descarga de stream en vivo...")
+
+    while True:
+        try:
+            logger.info("\n📥 Actualizando MPD...")
+            mpd_text = download_mpd(MPD_URL, HEADERS, PARAMS)
+
+            logger.info(f"--- Procesando Video (ID: {REPRESENTATION_ID_VIDEO}) ---")
+            video_downloader.process_segments_from_mpd(mpd_text)
+
+            logger.info(f"--- Procesando Audio (ID: {REPRESENTATION_ID_AUDIO}) ---")
+            audio_downloader.process_segments_from_mpd(mpd_text)
+
+            logger.info("\n🕒 Esperando 5 segundos para el próximo ciclo...")
+            sleep(5)
+            yield None
+
+        except KeyboardInterrupt:
+            logger.info("\n⏹️ Proceso cancelado por el usuario.")
+            break
+        except requests.exceptions.RequestException as e:
+            logger.info(f"❌ Error de red: {e}")
+            logger.info("🕒 Reintentando en 10 segundos...")
+            sleep(5)
+        except Exception as e:
+            logger.info(f"❌ Ocurrió un error inesperado: {e}")
+            logger.info("🕒 Reintentando en 10 segundos...")
+            sleep(5)
+
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    dite = DituStream()
-    channel_info = dite.get_schannel_info_by_name("Caracol TV")
-    if channel_info:
-        channel_id = channel_info["channelId"]
-        data = dite._get_url_dash_manifest(channel_id)
-        md_text = dite._download_dash_manifest(data)
-        qualities = dite.extract_qualities_from_mpd(md_text)
-        audio_qualities = [q for q in qualities if q["mimeType"] == "audio/mp4"]
-        video_qualities = [q for q in qualities if q["mimeType"] == "video/mp4"]
-
-        video_qualities.sort(key=lambda x: int(x["bandwidth"]), reverse=True)
-        audio_qualities.sort(key=lambda x: int(x["bandwidth"]), reverse=True)
-
-        print(video_qualities[0])
+    for i in ditu_main_yield(Path("output/test/ditu_stream__Sda")):
+        print(i)

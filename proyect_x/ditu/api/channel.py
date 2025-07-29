@@ -35,7 +35,7 @@ class DituChannel:
                         )
         return resultado
 
-    def get_schannel_info_by_name(self, channel_name: str) -> Optional[ChannelInfo]:
+    def get_info(self, channel_name: str) -> ChannelInfo:
         """
         Obtiene la información del canal por su nombre.
 
@@ -47,8 +47,8 @@ class DituChannel:
         """
         channels = self.get_all_channel_info()
         for channel in channels:
-            if unidecode(channel["channelName"].lower()) == unidecode(
-                channel_name.lower()
+            if unidecode(channel_name.lower()) in unidecode(
+                channel["channelName"].lower()
             ):
                 return ChannelInfo(**channel)
-        return None
+        raise ValueError(f"El canal '{channel_name}' no fue encontrado.")

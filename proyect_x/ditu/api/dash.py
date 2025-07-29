@@ -1,14 +1,22 @@
-from typing import Union
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import List, Union, cast
 
 import requests
 
-from ditu._live_dash_downloader import HEADERS
-from proyect_x.ditu.api.parser import extract_qualities
+from proyect_x.ditu.api.parser import MPDInfo, extract_qualities
 from proyect_x.ditu.schemas.dashmanifest_response import DashManifestResponse
 from proyect_x.ditu.schemas.entitlement_response import EntitlementChannelResponse
 
+HEADERS = {
+    "Host": "d1kkcfjl98zuzm.cloudfront.net",
+    "Accept-Encoding": "gzip, deflate, br",
+    "User-Agent": "okhttp/4.12.0",
+}
+
 
 class Dash:
+    namespaces = {"mpd": "urn:mpeg:dash:schema:mpd:2011"}
 
     def _get_entitlements_for_live_channel(
         self, channel_id: int
@@ -29,7 +37,12 @@ class Dash:
     def get_live_channel_manifest(self, channel_id: Union[str, int]) -> str:
         """Obtiene un JSON con la URL del DASH manifest para la transmision en vivo del canal especificado."""
         url = f"https://varnish-prod.avscaracoltv.com/AGL/1.6/A/ENG/ANDROID/ALL/CONTENT/VIDEOURL/LIVE/{channel_id}/10"
-        response = requests.get(url, headers=HEADERS)
+        headers = {
+            "Restful": "yes",
+            "Accept-Encoding": "gzip, deflate, br",
+            "User-Agent": "okhttp/4.12.0",
+        }
+        response = requests.get(url, headers=headers)
         response.raise_for_status()
 
         data: DashManifestResponse = response.json()
@@ -45,3 +58,90 @@ class Dash:
         Extrae las calidades disponibles desde el MPD.
         """
         return extract_qualities(mpd_text)
+
+    def _extract_url_init(self, Representation, base_url: str) -> str:
+        ns = self.namespaces
+        SegmentTemplate = Representation.find("./mpd:SegmentTemplate", ns)
+        if SegmentTemplate is None:
+            raise ValueError("SegmentTemplate is None")
+        return base_url + SegmentTemplate.get("initialization", "")
+
+    def _extract_segments(self, Representation, base_url: str) -> list[str]:
+        ns = self.namespaces
+        SegmentTemplate = Representation.find("./mpd:SegmentTemplate", ns)
+        if SegmentTemplate is None:
+            raise ValueError("SegmentTemplate is None")
+
+        SegmentTimeline = SegmentTemplate.find("./mpd:SegmentTimeline", ns)
+        if SegmentTimeline is None:
+            raise ValueError("SegmentTimeline is None")
+
+        # Inicialización
+        media_pattern = base_url + SegmentTemplate.get("media", "")
+        start_number = int(SegmentTemplate.get("startNumber", 1))
+
+        segments: List[str] = []
+        current_number = start_number
+
+        for S in SegmentTimeline.findall("mpd:S", ns):
+            repeat = int(S.get("r", 0))
+            for _ in range(repeat + 1):
+                segments.append(media_pattern.replace("$Number$", str(current_number)))
+                current_number += 1
+        return segments
+
+    def extract_mdp_info(self, mpd_text: str, representation_id: str) -> dict:
+        """
+        Extrae la URL de inicialización y las URLs de los segmentos de una representación específica
+        en un manifiesto MPD (MPEG-DASH).
+
+        Args:
+            mpd_text (str): Contenido del archivo MPD.
+            representation_id (str): ID de la representación deseada (video o audio).
+
+        Returns:
+            dict: {
+                "init_url": str,
+                "segments": List[str],
+                "mimetype": str,
+            }
+
+        Raises:
+            ValueError: Si no se encuentra alguno de los elementos necesarios.
+            Exception: Si no se encuentra la representación deseada.
+        """
+
+        root = ET.fromstring(mpd_text)  # type: ignore
+        ns = self.namespaces
+
+        # BaseURL
+        BaseURL = root.find("mpd:BaseURL", ns)
+        if BaseURL is None or BaseURL.text is None:
+            raise ValueError("BaseURL is None or empty")
+        base_url = BaseURL.text
+
+        # AdaptationSet de video/audio
+        AdaptationSet = root.find(".//mpd:AdaptationSet[@mimeType='video/mp4']", ns)
+        if AdaptationSet is None:
+            raise ValueError("AdaptationSet is None")
+
+        for Representation in AdaptationSet.findall("./mpd:Representation", ns):
+            if Representation.get("id") == representation_id:
+                init_url = self._extract_url_init(Representation, base_url)
+                segments = self._extract_segments(Representation, base_url)
+                return {
+                    "init_url": init_url,
+                    "segments": segments,
+                    "mimetype": Representation.get("mimeType", ""),
+                }
+
+        raise Exception(f"No se encontró Representation ID {representation_id}")
+
+    def _extract_best_video_adaptation_set(self, root) -> ET.Element:
+        ns = self.namespaces
+
+        AdaptationSet = root.find(".//mpd:AdaptationSet[@mimeType='video/mp4']", ns)
+        if AdaptationSet is None:
+            raise ValueError("AdaptationSet is None")
+
+        return AdaptationSet

@@ -1,6 +1,6 @@
 import requests
 
-url = "https://varnish-prod.avscaracoltv.com/AGL/1.6/A/ENG/ANDROID/ALL/CONTENT/VIDEOURL/LIVE/22/10"
+url = "https://varnish-prod.avscaracoltv.com/AGL/1.6/A/ENG/ANDROID/ALL/CONTENT/VIDEOURL/LIVE/43/10"
 headers = {
     "Restful": "yes",
     "Accept-Encoding": "gzip, deflate, br",

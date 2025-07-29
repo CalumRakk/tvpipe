@@ -1,27 +1,23 @@
 import xml.etree.ElementTree as ET
-from typing import Dict, List
+from pathlib import Path
+from typing import Dict, List, TypedDict
+
+import requests
+
+HEADERS = {
+    "Host": "d1kkcfjl98zuzm.cloudfront.net",
+    "Accept-Encoding": "gzip, deflate, br",
+    "User-Agent": "okhttp/4.12.0",
+}
 
 
-class MPDInfo:
-    """
-    Representa la información relevante de una representación (audio/video) en un manifiesto DASH (MPD).
-    """
-
-    def __init__(
-        self,
-        base_url: str,
-        init_url: str,
-        media_pattern: str,
-        start_number: int,
-        segments: List,
-        mimetype: str,
-    ):
-        self.base_url = base_url
-        self.init_url = init_url
-        self.media_pattern = media_pattern
-        self.start_number = start_number
-        self.segments = segments
-        self.mimetype = mimetype
+class MPDInfo(TypedDict):
+    base_url: str
+    init_url: str
+    media_pattern: str
+    start_number: int
+    segments: List[ET.Element]
+    mimetype: str
 
 
 def extract_qualities(mpd_text: str) -> List[Dict[str, str]]:
@@ -40,13 +36,13 @@ def extract_qualities(mpd_text: str) -> List[Dict[str, str]]:
                     "width": rep.attrib.get("width", ""),
                     "height": rep.attrib.get("height", ""),
                     "bandwidth": rep.attrib.get("bandwidth", ""),
-                    "mimeType": aset.attrib.get("mimeType", ""),
+                    "mimetype": aset.attrib.get("mimeType", ""),
                 }
             )
     return qualities
 
 
-def extract_representation_info(xml_text: str, representation_id: str) -> MPDInfo:
+def extract_mpdinfo(xml_text: str, representation_id: str) -> MPDInfo:
     """
     Parsea el MPD y devuelve la información detallada de una representación específica.
     """
