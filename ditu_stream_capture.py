@@ -82,9 +82,9 @@ if __name__ == "__main__":
 
         url = ditu.dash.get_live_channel_manifest(schule.channel_id)
         mpd = ditu.dash.fetch_mpd(url)
-        quality = ditu.dash._extract_qualities(mpd)[0]
+        # quality = ditu.dash._extract_qualities(mpd)[0]
 
-        mdp_info = ditu.dash.extract_mdp_info(mpd, quality["representation_id"])
+        mdp_info = ditu.dash.extract_mdp_info(mpd)
         for _ in ditu.dash.download_mdpinfo(mdp_info, output):
             logger.info(f"Capturando termina a las: {end_time.strftime('%I:%M %p')}")
             if datetime.now() >= end_time:

@@ -90,7 +90,7 @@ class Dash:
                 current_number += 1
         return segments
 
-    def extract_mdp_info(self, mpd_text: str, representation_id: str) -> dict:
+    def extract_mdp_info(self, mpd_text: str):
         """
         Extrae la URL de inicialización y las URLs de los segmentos de una representación específica
         en un manifiesto MPD (MPEG-DASH).
@@ -120,22 +120,39 @@ class Dash:
             raise ValueError("BaseURL is None or empty")
         base_url = BaseURL.text
 
-        # AdaptationSet de video/audio
-        AdaptationSet = root.find(".//mpd:AdaptationSet[@mimeType='video/mp4']", ns)
-        if AdaptationSet is None:
-            raise ValueError("AdaptationSet is None")
+        reps = []
+        for AdaptationSet in root.findall(".//mpd:AdaptationSet", ns):
+            for Representation in AdaptationSet.findall("./mpd:Representation", ns):
+                is_switching = AdaptationSet.get("bitstreamSwitching", "none")
+                mimetype = AdaptationSet.get("mimeType", "none")
 
-        for Representation in AdaptationSet.findall("./mpd:Representation", ns):
-            if Representation.get("id") == representation_id:
+                representation_id = Representation.get("id", "none")
                 init_url = self._extract_url_init(Representation, base_url)
                 segments = self._extract_segments(Representation, base_url)
-                return {
-                    "init_url": init_url,
-                    "segments": segments,
-                    "mimetype": Representation.get("mimeType", ""),
-                }
+                sampling_rate = Representation.get("audioSamplingRate", "none")
+                bandwidth = Representation.get("bandwidth", "none")
+                codecs = Representation.get("codecs", "none")
 
-        raise Exception(f"No se encontró Representation ID {representation_id}")
+                frame_rate = Representation.get("frameRate", "none")
+                height = Representation.get("height", "none")
+                width = Representation.get("width", "none")
+
+                reps.append(
+                    {
+                        "representation_id": representation_id,
+                        "init_url": init_url,
+                        "segments": segments,
+                        "mimetype": mimetype,
+                        "is_switching": is_switching,
+                        "sampling_rate": sampling_rate,
+                        "bandwidth": bandwidth,
+                        "codecs": codecs,
+                        "frame_rate": frame_rate,
+                        "height": height,
+                        "width": width,
+                    }
+                )
+        return reps
 
     def _extract_best_video_adaptation_set(self, root) -> ET.Element:
         ns = self.namespaces
