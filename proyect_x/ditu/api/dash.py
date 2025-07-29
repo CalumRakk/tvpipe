@@ -1,6 +1,6 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import List, Union, cast
+from typing import List, Literal, Optional, TypedDict, Union, cast
 
 import requests
 
@@ -13,6 +13,21 @@ HEADERS = {
     "Accept-Encoding": "gzip, deflate, br",
     "User-Agent": "okhttp/4.12.0",
 }
+
+
+class Representation(TypedDict):
+    representation_id: str
+    init_url: str
+    segments: List[str]
+    mimetype: str
+    is_switching: bool
+    bandwidth: int
+
+    sampling_rate: Optional[int]
+    codecs: Optional[str]
+    frame_rate: Optional[str]
+    height: Optional[int]
+    width: Optional[int]
 
 
 class Dash:
@@ -90,25 +105,32 @@ class Dash:
                 current_number += 1
         return segments
 
-    def extract_mdp_info(self, mpd_text: str):
+    def parse_mpd_representations(self, mpd_text: str) -> list[Representation]:
         """
-        Extrae la URL de inicialización y las URLs de los segmentos de una representación específica
-        en un manifiesto MPD (MPEG-DASH).
+        Este método analiza el contenido XML de un MPD para obtener detalles técnicos de cada representación de audio y video
+        disponibles en los AdaptationSet del manifiesto. Entre los datos extraídos se incluyen: URLs de inicialización y segmentos,
+        resoluciones, tasas de muestreo, códecs, ancho de banda y otros atributos multimedia.
 
         Args:
-            mpd_text (str): Contenido del archivo MPD.
-            representation_id (str): ID de la representación deseada (video o audio).
+            mpd_text (str): Contenido completo del archivo MPD en formato XML.
 
         Returns:
-            dict: {
-                "init_url": str,
-                "segments": List[str],
-                "mimetype": str,
-            }
+            list[dict]: Una lista de diccionarios, cada uno representando una representación multimedia encontrada.
+                        Cada diccionario contiene claves como:
+                        - representation_id
+                        - init_url
+                        - segments
+                        - mimetype
+                        - is_switching
+                        - sampling_rate
+                        - bandwidth
+                        - codecs
+                        - frame_rate
+                        - height
+                        - width
 
         Raises:
-            ValueError: Si no se encuentra alguno de los elementos necesarios.
-            Exception: Si no se encuentra la representación deseada.
+            ValueError: Si no se encuentra o está vacío el elemento BaseURL requerido para construir las URLs absolutas.
         """
 
         root = ET.fromstring(mpd_text)  # type: ignore
@@ -126,16 +148,21 @@ class Dash:
                 is_switching = AdaptationSet.get("bitstreamSwitching", "none")
                 mimetype = AdaptationSet.get("mimeType", "none")
 
-                representation_id = Representation.get("id", "none")
+                representation_id = int(Representation.get("id", "none"))
                 init_url = self._extract_url_init(Representation, base_url)
                 segments = self._extract_segments(Representation, base_url)
-                sampling_rate = Representation.get("audioSamplingRate", "none")
                 bandwidth = Representation.get("bandwidth", "none")
-                codecs = Representation.get("codecs", "none")
 
-                frame_rate = Representation.get("frameRate", "none")
-                height = Representation.get("height", "none")
-                width = Representation.get("width", "none")
+                sampling_rate = Representation.get("audioSamplingRate", None)
+                sampling_rate = int(sampling_rate) if sampling_rate else None
+
+                codecs = Representation.get("codecs", None)
+                frame_rate = Representation.get("frameRate", None)
+
+                height = Representation.get("height", None)
+                height = int(height) if height else None
+                width = Representation.get("width", None)
+                width = int(width) if width else None
 
                 reps.append(
                     {
@@ -153,12 +180,3 @@ class Dash:
                     }
                 )
         return reps
-
-    def _extract_best_video_adaptation_set(self, root) -> ET.Element:
-        ns = self.namespaces
-
-        AdaptationSet = root.find(".//mpd:AdaptationSet[@mimeType='video/mp4']", ns)
-        if AdaptationSet is None:
-            raise ValueError("AdaptationSet is None")
-
-        return AdaptationSet

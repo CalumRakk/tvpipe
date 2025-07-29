@@ -72,20 +72,5 @@ if __name__ == "__main__":
         #     logger.info("El capítulo ya ha sido capturado.")
         #     continue
 
-        title = schule.title
-        title_slug = unidecode(title).lower().replace(" ", ".")
-        number = schule.episode_number
-        start = schule.start_time.strftime("%Y_%m_%d.%I_%M.%p")
-        end = schule.end_time.strftime("%I.%M.%p")
-        folder_name = f"{title_slug}.capitulo.{number}.ditu.live.1080p.{start}"
-        output = Path("output/test") / folder_name
-
-        url = ditu.dash.get_live_channel_manifest(schule.channel_id)
-        mpd = ditu.dash.fetch_mpd(url)
-        # quality = ditu.dash._extract_qualities(mpd)[0]
-
-        mdp_info = ditu.dash.extract_mdp_info(mpd)
-        for _ in ditu.dash.download_mdpinfo(mdp_info, output):
-            logger.info(f"Capturando termina a las: {end_time.strftime('%I:%M %p')}")
-            if datetime.now() >= end_time:
-                break
+        logger.info(f"Publicando el capitulo: {schule.title}")
+        ditu.capture_schedule(schule)
