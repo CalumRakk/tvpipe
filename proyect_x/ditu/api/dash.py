@@ -4,7 +4,6 @@ from typing import List, Literal, Optional, TypedDict, Union, cast
 
 import requests
 
-from proyect_x.ditu.api.parser import MPDInfo, extract_qualities
 from proyect_x.ditu.schemas.dashmanifest_response import DashManifestResponse
 from proyect_x.ditu.schemas.entitlement_response import EntitlementChannelResponse
 
@@ -67,12 +66,6 @@ class Dash:
         response = requests.get(url, headers=HEADERS)
         response.raise_for_status()
         return response.text
-
-    def _extract_qualities(self, mpd_text: str) -> list:
-        """
-        Extrae las calidades disponibles desde el MPD.
-        """
-        return extract_qualities(mpd_text)
 
     def _extract_url_init(self, Representation, base_url: str) -> str:
         ns = self.namespaces
