@@ -73,4 +73,4 @@ if __name__ == "__main__":
         #     continue
 
         logger.info(f"Publicando el capitulo: {schule.title}")
-        ditu.capture_schedule(schule)
+        output = ditu.capture_schedule(schule, "output/test")

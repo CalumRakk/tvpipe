@@ -1,12 +1,13 @@
 import logging
 from pathlib import Path
 from time import sleep
+from typing import Union, cast
 from urllib.parse import urlparse
 
 import requests
 from unidecode import unidecode
 
-from proyect_x.ditu.api.dash import Dash
+from proyect_x.ditu.api.dash import Dash, Representation
 from proyect_x.ditu.schemas.simple_schedule import SimpleSchedule
 
 from .api.channel import DituChannel
@@ -18,6 +19,49 @@ HEADERS = {
     "User-Agent": "okhttp/4.12.0",
 }
 logger = logging.getLogger(__name__)
+
+
+def _build_output_path(self, schedule: SimpleSchedule) -> Path:
+    title_slug = unidecode(schedule.title.strip()).lower().replace(" ", ".")
+    start = schedule.start_time.strftime("%Y_%m_%d.%I_%M.%p")
+    folder_name = (
+        f"{title_slug}.capitulo.{schedule.episode_number}.ditu.live.1080p.{start}"
+    )
+    return Path("output/test") / folder_name
+
+
+def _select_best_representation(self, reps: list, key: str) -> dict:
+    return sorted(reps, key=lambda x: x.get(key) or 0, reverse=True)[0]
+
+
+def _download_representation_segments(self, rep: dict, base_output: Path):
+    mime, _ = rep["mimetype"].split("/")
+    init_path = self._build_segment_path(rep["init_url"], base_output, mime)
+    self._download_file_if_needed(rep["init_url"], init_path)
+
+    for segment_url in rep["segments"]:
+        segment_path = self._build_segment_path(segment_url, base_output, mime)
+        self._download_file_if_needed(segment_url, segment_path, retry_on_fail=True)
+
+
+def _build_segment_path(self, url: str, base_output: Path, mime: str) -> Path:
+    path = urlparse(url).path
+    return base_output / mime / Path(path).name
+
+
+def _download_file_if_needed(self, url: str, path: Path, retry_on_fail: bool = False):
+    if path.exists():
+        return
+    try:
+        response = requests.get(url, headers=HEADERS)
+        response.raise_for_status()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(response.content)
+        logger.info(f"✅ Descargado: {path}")
+    except Exception as e:
+        logger.error(f"❌ Error al descargar: {path}: {e}")
+        if retry_on_fail:
+            sleep(7)
 
 
 class DituStream:
@@ -42,75 +86,58 @@ class DituStream:
         else:
             return self.schedule.get_schedule_by_id(int(channel))
 
-    def capture_schedule(self, schule: SimpleSchedule):
-        title = schule.title
-        title_slug = unidecode(title.strip()).lower().replace(" ", ".")
-        number = schule.episode_number
-        start = schule.start_time.strftime("%Y_%m_%d.%I_%M.%p")
-        end = schule.end_time.strftime("%I.%M.%p")
-        folder_name = f"{title_slug}.capitulo.{number}.ditu.live.1080p.{start}"
-        output = Path("output/test") / folder_name
+    def _build_output_path(
+        self, schedule: SimpleSchedule, base_output: Path, video_rep: Representation
+    ) -> Path:
+        title_slug = unidecode(schedule.title.strip()).lower().replace(" ", ".")
+        start = schedule.start_time.strftime("%Y_%m_%d.%I_%M.%p")
+        width = video_rep["width"]
+        folder_name = f"{title_slug}.capitulo.{schedule.episode_number}.ditu.live.{width}p.{start}"
+        return base_output / folder_name
 
-        url = self.dash.get_live_channel_manifest(schule.channel_id)
+    def _select_best_representation(self, reps: list, key: str) -> Representation:
+        return sorted(reps, key=lambda x: x.get(key) or 0, reverse=True)[0]
+
+    def _download_representation_segments(self, rep: Representation, base_output: Path):
+        path = urlparse(rep["init_url"]).path
+        init_path = base_output / Path(path).name
+        self._download_file_if_needed(rep["init_url"], init_path)
+
+        for segment_url in rep["segments"]:
+            path = urlparse(segment_url).path
+            segment_path = base_output / Path(path).name
+            self._download_file_if_needed(segment_url, segment_path)
+
+    def _download_file_if_needed(self, url: str, path: Path):
+        if path.exists():
+            return
+        try:
+            response = requests.get(url, headers=HEADERS)
+            response.raise_for_status()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(response.content)
+            logger.info(f"✅ Descargado: {path}")
+        except Exception as e:
+            logger.error(f"❌ Error al descargar: {path}: {e}")
+
+    def capture_schedule(
+        self, schedule: SimpleSchedule, output_dir: Union[str, Path]
+    ) -> Path:
+        url = self.dash.get_live_channel_manifest(schedule.channel_id)
+        output_dir = Path(output_dir) if isinstance(output_dir, str) else output_dir
+
         while True:
             mpd = self.dash.fetch_mpd(url)
-            representations = self.dash.parse_mpd_representations(mpd)
+            reps = self.dash.parse_mpd_representations(mpd)
 
-            video_rep = sorted(
-                representations, key=lambda x: x.get("width") or 0, reverse=True
-            )[0]
-            audio_rep = sorted(
-                representations,
-                key=lambda x: x.get("audioSamplingRate") or 0,
-                reverse=True,
-            )[0]
+            video_rep = self._select_best_representation(reps, key="width")
 
-            mime, _ = video_rep["mimetype"].split("/")
+            output = self._build_output_path(schedule, output_dir, video_rep)
 
-            init_url = video_rep["init_url"]
-            init_urlpased = urlparse(init_url)
-            init_file_path = output / mime / Path(init_urlpased.path).name
-            if not init_file_path.exists():
-                respose = requests.get(init_url, headers=HEADERS)
-                respose.raise_for_status()
-                init_file_path.parent.mkdir(parents=True, exist_ok=True)
-                init_file_path.write_bytes(respose.content)
-                logger.info(f"✅ Descargado: {init_file_path}")
+            audio_rep = self._select_best_representation(reps, key="sampling_rate")
 
-            for url in video_rep["segments"]:
-                urlpased = urlparse(url)
-                file_path = output / mime / Path(urlpased.path).name
-                if not file_path.exists():
-                    try:
-                        respose = requests.get(url, headers=HEADERS)
-                        respose.raise_for_status()
-                        file_path.parent.mkdir(parents=True, exist_ok=True)
-                        file_path.write_bytes(respose.content)
-                        logger.info(f"✅ Descargado: {file_path}")
-                    except Exception as e:
-                        logger.error(f"❌ Error al descargar: {file_path}: {e}")
-                        sleep(7)
+            self._download_representation_segments(video_rep, output / "video")
+            self._download_representation_segments(audio_rep, output / "audio")
 
-            init_url = audio_rep["init_url"]
-            init_urlpased = urlparse(init_url)
-            init_file_path = output / mime / Path(init_urlpased.path).name
-            if not init_file_path.exists():
-                respose = requests.get(init_url, headers=HEADERS)
-                respose.raise_for_status()
-                init_file_path.parent.mkdir(parents=True, exist_ok=True)
-                init_file_path.write_bytes(respose.content)
-                logger.info(f"✅ Descargado: {init_file_path}")
-
-            for url in audio_rep["segments"]:
-                urlpased = urlparse(url)
-                file_path = output / mime / Path(urlpased.path).name
-                if not file_path.exists():
-                    try:
-                        respose = requests.get(url, headers=HEADERS)
-                        respose.raise_for_status()
-                        file_path.parent.mkdir(parents=True, exist_ok=True)
-                        file_path.write_bytes(respose.content)
-                        logger.info(f"✅ Descargado: {file_path}")
-                    except Exception as e:
-                        logger.error(f"❌ Error al descargar: {file_path}: {e}")
-                        sleep(7)
+            sleep(5)  # TODO: reemplazar por el valor recomendado del manifest
+        return output
