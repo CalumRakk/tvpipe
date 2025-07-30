@@ -48,7 +48,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     ditu = DituStream()
-    channel_info = ditu.channel.get_info("desafio")
+    channel_info = ditu.channel.get_info("Club")
     schedules = ditu.get_schedule(channel_info["channelId"])
     programs: List[SimpleSchedule] = [
         schedule
@@ -57,20 +57,21 @@ if __name__ == "__main__":
         or "Pre-Desafío" in schedule.title
         or "Post Desafío" in schedule.title
         or "Tour" in schedule.title
+        or "Club" in schedule.title
     ]
 
     for schule in programs:
         start_time = schule.start_time
         end_time = schule.end_time
 
-        # if should_wait_for_publication(start_time):
-        #     wait_release(start_time)
-        #     print(
-        #         f"Esperando hasta la hora de lanzamiento: {start_time.strftime('%I:%M %p')}"
-        #     )
-        # elif datetime.now() >= end_time:
-        #     logger.info("El capítulo ya ha sido capturado.")
-        #     continue
+        if should_wait_for_publication(start_time):
+            wait_release(start_time)
+            print(
+                f"Esperando hasta la hora de lanzamiento: {start_time.strftime('%I:%M %p')}"
+            )
+        elif datetime.now() >= end_time:
+            logger.info("El capítulo ya ha sido capturado.")
+            continue
 
         logger.info(f"Publicando el capitulo: {schule.title}")
         result = ditu.capture_schedule(schule, "output/test")

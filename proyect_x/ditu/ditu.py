@@ -1,6 +1,7 @@
 import logging
 import shutil
 import subprocess
+from datetime import datetime
 from pathlib import Path
 from time import sleep
 from typing import Tuple, Union, cast
@@ -16,7 +17,6 @@ from .api.channel import DituChannel
 from .api.schedule import DituSchedule
 
 HEADERS = {
-    "Host": "d1kkcfjl98zuzm.cloudfront.net",
     "Accept-Encoding": "gzip, deflate, br",
     "User-Agent": "okhttp/4.12.0",
 }
@@ -94,7 +94,11 @@ class DituStream:
             "audio_init": None,
             "audio_segments": [],
         }
-        for _ in range(5):
+
+        while True:
+            if datetime.now() > schedule.end_time:
+                logger.info(f"Programa terminado: {schedule.title}")
+                break
             mpd = self.dash.fetch_mpd(url)
             reps = self.dash.parse_mpd_representations(mpd)
 
@@ -104,8 +108,11 @@ class DituStream:
 
             audio_rep = self._select_best_representation(reps, key="sampling_rate")
 
-            video_init, video_segments = self._download_representation_segments(
-                video_rep, output / "video"
+            (
+                video_init,
+                video_segments,
+            ) = self._download_representation_segments(
+                video_rep, audio_rep, output / "video"
             )
             result["video_init"] = video_init
             result["video_segments"].extend(video_segments)
@@ -116,6 +123,7 @@ class DituStream:
             result["audio_segments"].extend(audio_segments)
 
             sleep(5)  # TODO: reemplazar por el valor recomendado del manifest
+
         return result
 
     def combine_and_merge(self, result: dict):
@@ -124,15 +132,13 @@ class DituStream:
         with open(video_path, "wb") as fp:
             fp.write(result["video_init"].read_bytes())
             for segment in result["video_segments"]:
-                with open(segment, "rb") as fp_segment:
-                    fp.write(fp_segment.read())
+                fp.write(segment.read_bytes())
 
         audio_path = folder / ("audio_combibed" + result["audio_init"].suffix)
         with open(audio_path, "wb") as fp:
             fp.write(result["audio_init"].read_bytes())
             for segment in result["audio_segments"]:
-                with open(segment, "rb") as fp_segment:
-                    fp.write(fp_segment.read())
+                fp.write(segment.read())
 
         output = folder.parent / (folder.name + video_path.suffix)
         cmd = [

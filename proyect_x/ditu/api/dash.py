@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Literal, Optional, TypedDict, Union, cast
+from urllib.parse import urljoin, urlparse
 
 import requests
 
@@ -72,7 +73,7 @@ class Dash:
         SegmentTemplate = Representation.find("./mpd:SegmentTemplate", ns)
         if SegmentTemplate is None:
             raise ValueError("SegmentTemplate is None")
-        return base_url + SegmentTemplate.get("initialization", "")
+        return urljoin(base_url, SegmentTemplate.get("initialization", ""))
 
     def _extract_segments(self, Representation, base_url: str) -> list[str]:
         ns = self.namespaces
@@ -97,6 +98,14 @@ class Dash:
                 segments.append(media_pattern.replace("$Number$", str(current_number)))
                 current_number += 1
         return segments
+
+    def _extract_base_url(self, root) -> str:
+        ns = self.namespaces
+        for BaseURL in root.findall(".//mpd:BaseURL", ns):
+            base_url = BaseURL.text
+            if urlparse(base_url).path != "/":
+                return base_url
+        raise ValueError("BaseURL is None")
 
     def parse_mpd_representations(self, mpd_text: str) -> list[Representation]:
         """
@@ -129,11 +138,7 @@ class Dash:
         root = ET.fromstring(mpd_text)  # type: ignore
         ns = self.namespaces
 
-        # BaseURL
-        BaseURL = root.find("mpd:BaseURL", ns)
-        if BaseURL is None or BaseURL.text is None:
-            raise ValueError("BaseURL is None or empty")
-        base_url = BaseURL.text
+        base_url = self._extract_base_url(root)
 
         reps = []
         for AdaptationSet in root.findall(".//mpd:AdaptationSet", ns):
