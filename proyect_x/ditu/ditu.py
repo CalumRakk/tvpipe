@@ -1,7 +1,7 @@
 import logging
 import shutil
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
 from typing import Tuple, Union, cast
@@ -80,7 +80,7 @@ class DituStream:
             response.raise_for_status()
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(response.content)
-            logger.info(f"✅ Descargado: {path}")
+            logger.info(f"✅ Descargado: {path.name}")
             return True
         except Exception as e:
             logger.error(f"❌ Error al descargar: {path}: {e}")
@@ -96,35 +96,46 @@ class DituStream:
             "audio_segments": [],
             "audio_represenation_id": None,
         }
-
-        for _ in range(5):
-            if datetime.now() > schedule.end_time:
+        representation_id = None
+        while True:
+            if datetime.now() > schedule.end_time + timedelta(seconds=5):
                 logger.info(f"Programa terminado: {schedule.title}")
                 break
             mpd = self.dash.fetch_mpd(url)
             reps = self.dash.parse_mpd_representations(mpd)
+            if reps[0]["count_periods"] == 1 and (
+                representation_id == reps[0]["representation_id"]
+                or representation_id is None
+            ):
+                if representation_id is None:
+                    representation_id = reps[0]["representation_id"]
 
-            video_rep = self._select_best_representation(reps, key="height")
+                video_rep = self._select_best_representation(reps, key="height")
+                output = self._build_output_path(schedule, output_dir, video_rep)
+                audio_rep = self._select_best_representation(reps, key="sampling_rate")
 
-            output = self._build_output_path(schedule, output_dir, video_rep)
+                period_id = video_rep["period_id"]
+                v_segment_name = Path(urlparse(video_rep["segments"][0]).path).name
+                a_segment_name = Path(urlparse(audio_rep["segments"][0]).path).name
+                logger.info(
+                    f"📥 Descargando MPD... {period_id} {v_segment_name} {a_segment_name}"
+                )
 
-            audio_rep = self._select_best_representation(reps, key="sampling_rate")
+                video_init, video_segments = self._download_representation_segments(
+                    video_rep, output / "video"
+                )
+                audio_init, audio_segments = self._download_representation_segments(
+                    audio_rep, output / "audio"
+                )
+                # -- Actualizar el diccionario con los datos de la captura --
+                result["video_init"] = video_init
+                result["video_segments"].extend(video_segments)
+                result["audio_init"] = audio_init
+                result["audio_segments"].extend(audio_segments)
+                result["video_represenation_id"] = video_rep["representation_id"]
+                result["audio_represenation_id"] = audio_rep["representation_id"]
 
-            video_init, video_segments = self._download_representation_segments(
-                video_rep, output / "video"
-            )
-            audio_init, audio_segments = self._download_representation_segments(
-                audio_rep, output / "audio"
-            )
-            # -- Actualizar el diccionario con los datos de la captura --
-            result["video_init"] = video_init
-            result["video_segments"].extend(video_segments)
-            result["audio_init"] = audio_init
-            result["audio_segments"].extend(audio_segments)
-            result["video_represenation_id"] = video_rep["representation_id"]
-            result["audio_represenation_id"] = audio_rep["representation_id"]
-
-            sleep(5)  # TODO: reemplazar por el valor recomendado del manifest
+            sleep(1)  # TODO: reemplazar por el valor recomendado del manifest
 
         self.cleanup_audio_segments_without_video(result)
 
@@ -176,13 +187,19 @@ class DituStream:
         video_path = folder / ("video_combibed" + result["video_init"].suffix)
         with open(video_path, "wb") as fp:
             fp.write(result["video_init"].read_bytes())
-            for segment in result["video_segments"]:
+            segment_folder = result["video_segments"][0].parent
+            segments = [i for i in segment_folder.iterdir() if i.is_file()]
+            segments.sort(key=lambda x: int(x.stem.split("_")[-1]))
+            for segment in segments:
                 fp.write(segment.read_bytes())
 
         audio_path = folder / ("audio_combibed" + result["audio_init"].suffix)
         with open(audio_path, "wb") as fp:
             fp.write(result["audio_init"].read_bytes())
-            for segment in result["audio_segments"]:
+            segment_folder = result["audio_segments"][0].parent
+            segments = [i for i in segment_folder.iterdir() if i.is_file()]
+            segments.sort(key=lambda x: int(x.stem.split("_")[-1]))
+            for segment in segments:
                 fp.write(segment.read_bytes())
 
         output = folder.parent / (folder.name + video_path.suffix)
@@ -203,6 +220,6 @@ class DituStream:
         ]
         subprocess.run(cmd, check=True)
 
-        shutil.rmtree(str(folder))
+        # shutil.rmtree(str(folder))
 
         logger.info(f"Archivo final: {output}")

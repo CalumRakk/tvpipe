@@ -58,6 +58,8 @@ if __name__ == "__main__":
         or "Post Desafío" in schedule.title
         or "Tour" in schedule.title
         or "Club" in schedule.title
+        or "Suite" in schedule.title
+        or True
     ]
 
     for schule in programs:

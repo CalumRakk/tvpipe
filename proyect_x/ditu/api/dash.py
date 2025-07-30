@@ -16,6 +16,8 @@ HEADERS = {
 
 
 class Representation(TypedDict):
+    period_id: str
+    count_periods: int
     representation_id: str
     init_url: str
     segments: List[str]
@@ -138,6 +140,12 @@ class Dash:
         root = ET.fromstring(mpd_text)  # type: ignore
         ns = self.namespaces
 
+        Period = root.find("./mpd:Period", ns)
+        assert Period is not None, "Period is None"
+
+        count_periods = len(root.findall("./mpd:Period", ns))
+
+        period_id = Period.get("id", None)
         base_url = self._extract_base_url(root)
 
         reps = []
@@ -165,6 +173,7 @@ class Dash:
                 reps.append(
                     {
                         "representation_id": representation_id,
+                        "period_id": period_id,
                         "init_url": init_url,
                         "segments": segments,
                         "mimetype": mimetype,
@@ -175,6 +184,7 @@ class Dash:
                         "frame_rate": frame_rate,
                         "height": height,
                         "width": width,
+                        "count_periods": count_periods,
                     }
                 )
         return reps
