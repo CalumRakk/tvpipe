@@ -12,7 +12,7 @@ from proyect_x.ditu.schemas.raw_schedule_response import (
     ProgramItem,
     RawTVScheduleResponse,
 )
-from proyect_x.ditu.schemas.simple_schedule import SimpleSchedule
+from proyect_x.ditu.schemas.simple_schedule import CurrentSchedule, SimpleSchedule
 
 HEADERS = {
     "Restful": "yes",
@@ -22,7 +22,7 @@ HEADERS = {
 
 
 class DituSchedule:
-    def get_current_program_live(self, channel_id: int) -> FilterResponse:
+    def get_current_program_live(self, channel_id: int) -> CurrentSchedule:
         """Obtiene informacion del programa actualmente en emision de un canal."""
         url = "https://varnish-prod.avscaracoltv.com/AGL/1.6/A/ENG/ANDROID/ALL/TRAY/SEARCH/PROGRAM"
         params = {
@@ -31,7 +31,22 @@ class DituSchedule:
         }
         response = requests.get(url, params=params, headers=HEADERS)
         response.raise_for_status()
-        return response.json()
+        filter = response.json()
+        item = filter["resultObj"]["containers"][0]
+        data = item["metadata"]
+        channel_info = item["channel"]
+        return CurrentSchedule(
+            contentId=data["contentId"],
+            title=data["title"],
+            longDescription=data["longDescription"],
+            duration=data["duration"],
+            airingStartTime=data["airingStartTime"],
+            airingEndTime=data["airingEndTime"],
+            episodeId=data["episodeId"],
+            episodeTitle=data["episodeTitle"],
+            season=data["season"],
+            channel_info=channel_info,
+        )
 
     def _get_entitlements_for_live_channel(
         self, channel_id: int

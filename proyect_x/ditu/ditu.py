@@ -80,7 +80,7 @@ class DituStream:
             response.raise_for_status()
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(response.content)
-            logger.info(f"✅ Descargado: {path.name}")
+            logger.info(f"✅ Descargado: {path.parent.name}/{path.name}")
             return True
         except Exception as e:
             logger.error(f"❌ Error al descargar: {path}: {e}")
@@ -98,9 +98,17 @@ class DituStream:
         }
         representation_id = None
         while True:
-            if datetime.now() > schedule.end_time + timedelta(seconds=5):
-                logger.info(f"Programa terminado: {schedule.title}")
-                break
+            if datetime.now() > schedule.end_time:
+                current = self.schedule.get_current_program_live(schedule.channel_id)
+                if current.end_time != schedule.end_time:
+                    logger.info(
+                        f"La finalizacion del programa ha cambiado: {schedule.title}"
+                    )
+                    schedule.airingEndTime = current.airingEndTime
+                    continue
+                else:
+                    logger.info(f"Programa terminado: {schedule.title}")
+                    break
             mpd = self.dash.fetch_mpd(url)
             reps = self.dash.parse_mpd_representations(mpd)
             if reps[0]["count_periods"] == 1 and (
@@ -113,13 +121,6 @@ class DituStream:
                 video_rep = self._select_best_representation(reps, key="height")
                 output = self._build_output_path(schedule, output_dir, video_rep)
                 audio_rep = self._select_best_representation(reps, key="sampling_rate")
-
-                period_id = video_rep["period_id"]
-                v_segment_name = Path(urlparse(video_rep["segments"][0]).path).name
-                a_segment_name = Path(urlparse(audio_rep["segments"][0]).path).name
-                logger.info(
-                    f"📥 Descargando MPD... {period_id} {v_segment_name} {a_segment_name}"
-                )
 
                 video_init, video_segments = self._download_representation_segments(
                     video_rep, output / "video"

@@ -5,6 +5,35 @@ from pydantic import BaseModel
 from proyect_x.ditu.schemas.common import ChannelInfo
 
 
+class CurrentSchedule(BaseModel):
+    contentId: int
+    title: str
+    longDescription: str
+    duration: int
+    airingStartTime: int
+    airingEndTime: int
+    episodeId: int
+    episodeTitle: str
+    season: int
+    channel_info: dict
+
+    @property
+    def start_time(self) -> datetime:
+        return datetime.fromtimestamp(self.airingStartTime / 1000)
+
+    @property
+    def end_time(self) -> datetime:
+        return datetime.fromtimestamp(self.airingEndTime / 1000)
+
+    @property
+    def start_time_as_12hours(self) -> str:
+        return self.start_time.strftime("%I:%M %p")
+
+    @property
+    def end_time_as_12hours(self) -> str:
+        return self.end_time.strftime("%I:%M %p")
+
+
 class SimpleSchedule(BaseModel):
     contentId: int
     title: str
