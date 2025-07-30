@@ -91,11 +91,13 @@ class DituStream:
         result = {
             "video_init": None,
             "video_segments": [],
+            "video_represenation_id": None,
             "audio_init": None,
             "audio_segments": [],
+            "audio_represenation_id": None,
         }
 
-        while True:
+        for _ in range(5):
             if datetime.now() > schedule.end_time:
                 logger.info(f"Programa terminado: {schedule.title}")
                 break
@@ -108,23 +110,66 @@ class DituStream:
 
             audio_rep = self._select_best_representation(reps, key="sampling_rate")
 
-            (
-                video_init,
-                video_segments,
-            ) = self._download_representation_segments(
-                video_rep, audio_rep, output / "video"
+            video_init, video_segments = self._download_representation_segments(
+                video_rep, output / "video"
             )
-            result["video_init"] = video_init
-            result["video_segments"].extend(video_segments)
             audio_init, audio_segments = self._download_representation_segments(
                 audio_rep, output / "audio"
             )
+            # -- Actualizar el diccionario con los datos de la captura --
+            result["video_init"] = video_init
+            result["video_segments"].extend(video_segments)
             result["audio_init"] = audio_init
             result["audio_segments"].extend(audio_segments)
+            result["video_represenation_id"] = video_rep["representation_id"]
+            result["audio_represenation_id"] = audio_rep["representation_id"]
 
             sleep(5)  # TODO: reemplazar por el valor recomendado del manifest
 
+        self.cleanup_audio_segments_without_video(result)
+
         return result
+
+    def cleanup_audio_segments_without_video(self, result: dict):
+        """
+        Elimina archivos de video y audio cuyos índices no tienen una contraparte en el otro grupo.
+
+        Parámetros:
+            result (dict): Diccionario con claves 'video_segments' y 'audio_segments',
+                        cada uno conteniendo una lista de rutas a archivos por segmento.
+        """
+        v_rep_id = result["video_represenation_id"]
+        a_rep_id = result["audio_represenation_id"]
+        folder_video: Path = result["video_segments"][0].parent
+        folder_audio: Path = result["audio_segments"][0].parent
+
+        video_match = f"index_video_{v_rep_id}"
+        video_index_map = {
+            path: path.name.split(video_match)[-1]
+            for path in folder_video.iterdir()
+            if video_match in path.name
+        }
+
+        audio_match = f"index_audio_{a_rep_id}"
+        audio_index_map = {
+            path: path.name.split(audio_match)[-1]
+            for path in folder_audio.iterdir()
+            if audio_match in path.name
+        }
+
+        video_indices = set(video_index_map.values())
+        audio_indices = set(audio_index_map.values())
+
+        unmatched_audio = [
+            path for path, idx in audio_index_map.items() if idx not in video_indices
+        ]
+        unmatched_video = [
+            path for path, idx in video_index_map.items() if idx not in audio_indices
+        ]
+
+        for path in unmatched_audio + unmatched_video:
+            logger.info(f"Eliminando segmento sin pareja: {path}")
+            path.unlink()
 
     def combine_and_merge(self, result: dict):
         folder = result["video_init"].parent
@@ -138,7 +183,7 @@ class DituStream:
         with open(audio_path, "wb") as fp:
             fp.write(result["audio_init"].read_bytes())
             for segment in result["audio_segments"]:
-                fp.write(segment.read())
+                fp.write(segment.read_bytes())
 
         output = folder.parent / (folder.name + video_path.suffix)
         cmd = [
