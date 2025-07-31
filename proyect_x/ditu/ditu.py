@@ -189,8 +189,8 @@ class DituStream:
         with open(video_path, "wb") as fp:
             fp.write(result["video_init"].read_bytes())
             segment_folder = result["video_segments"][0].parent
-            segments = [i for i in segment_folder.iterdir() if i.is_file()]
-            segments.sort(key=lambda x: int(x.stem.split("_")[-1]))
+            segments: list[Path] = [i for i in segment_folder.iterdir() if i.is_file()]
+            segments.sort(key=lambda x: x.stat().st_mtime)
             for segment in segments:
                 fp.write(segment.read_bytes())
 
@@ -199,7 +199,7 @@ class DituStream:
             fp.write(result["audio_init"].read_bytes())
             segment_folder = result["audio_segments"][0].parent
             segments = [i for i in segment_folder.iterdir() if i.is_file()]
-            segments.sort(key=lambda x: int(x.stem.split("_")[-1]))
+            segments.sort(key=lambda x: x.stat().st_mtime)
             for segment in segments:
                 fp.write(segment.read_bytes())
 
