@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Literal, Optional, TypedDict, Union, cast
 from urllib.parse import urljoin, urlparse
@@ -15,21 +16,76 @@ HEADERS = {
 }
 
 
-class Representation(TypedDict):
-    period_id: str
-    count_periods: int
-    representation_id: str
-    init_url: str
-    segments: List[str]
-    mimetype: str
-    is_switching: bool
+@dataclass
+class Representation:
+    id: int
+    codecs: str
     bandwidth: int
+    # Estos no son atributos directos. Son atributos extradios de campos hijos.
+    url_initial: str
+    media: str
+    segments: List[str]
 
-    sampling_rate: Optional[int]
-    codecs: Optional[str]
-    frame_rate: Optional[str]
     height: Optional[int]
     width: Optional[int]
+    frameRate: Optional[str]
+    audioSamplingRate: Optional[str]
+
+
+@dataclass
+class AdaptationSet:
+    id: int
+    bitstreamSwitching: str
+    mimeType: str
+    segmentAlignment: str
+    startWithSAP: str
+    representations: List[Representation]
+
+    subsegmentAlignment: Optional[bool]
+    subsegmentStartsWithSAP: Optional[int]
+    lang: Optional[str]
+
+    @property
+    def is_video(self) -> bool:
+        return "video" in self.mimeType
+
+    @property
+    def mimetype(self) -> str:
+        return self.mimeType
+
+    def get_best_representation(self, key: Optional[str] = None) -> Representation:
+        """Devuelve la 'best' representacion que tenga un AdaptationSet independientemente de si es video o audio. Si se pasa un key, es importante que sea un atributo de la representacion."""
+        if self.is_video:
+            key = "height" if key is None else key
+        else:
+            key = "audioSamplingRate" if key is None else key
+        return sorted(
+            self.representations, key=lambda x: getattr(x, key) or 0, reverse=True
+        )[0]
+
+
+@dataclass
+class Period:
+    id: str
+    start: str
+    BaseURL: str
+    AdaptationSets: List[AdaptationSet]
+
+    @property
+    def base_url(self) -> str:
+        return self.BaseURL
+
+    def best_video_representation(self, key: Optional[str] = None) -> Representation:
+        for adapt in self.AdaptationSets:
+            if adapt.is_video:
+                return adapt.get_best_representation()
+        raise ValueError("No hay representaciones de video")
+
+    def best_audio_representation(self, key: Optional[str] = None) -> Representation:
+        for adapt in self.AdaptationSets:
+            if not adapt.is_video:
+                return adapt.get_best_representation()
+        raise ValueError("No hay representaciones de audio")
 
 
 class Dash:
@@ -70,46 +126,165 @@ class Dash:
         response.raise_for_status()
         return response.text
 
-    def _extract_url_init(self, Representation, base_url: str) -> str:
+    # def _extract_base_url(self, root) -> str:
+    #     ns = self.namespaces
+    #     for BaseURL in root.findall(".//mpd:BaseURL", ns):
+    #         base_url = BaseURL.text
+    #         if urlparse(base_url).path != "/":
+    #             return base_url
+    #     raise ValueError("BaseURL is None")
+
+    def _extract_additional_from_childs(self, representation: ET.Element) -> dict:
         ns = self.namespaces
-        SegmentTemplate = Representation.find("./mpd:SegmentTemplate", ns)
-        if SegmentTemplate is None:
-            raise ValueError("SegmentTemplate is None")
-        return urljoin(base_url, SegmentTemplate.get("initialization", ""))
+        segmentTemplate = representation.find("./mpd:SegmentTemplate", ns)
+        assert segmentTemplate is not None, "SegmentTemplate is None"
 
-    def _extract_segments(self, Representation, base_url: str) -> list[str]:
+        initialization = segmentTemplate.attrib["initialization"]
+        media = segmentTemplate.attrib["media"]
+        presentationTimeOffset = segmentTemplate.attrib["presentationTimeOffset"]
+        startNumber = segmentTemplate.attrib["startNumber"]
+        timescale = segmentTemplate.attrib["timescale"]
+        return {
+            "initialization": initialization,
+            "media": media,
+            "presentationTimeOffset": presentationTimeOffset,
+            "startNumber": startNumber,
+            "timescale": timescale,
+        }
+
+        # urljoin(base_url, SegmentTemplate.get("initialization", ""))
+
+    def _extract_segments(
+        self,
+        representation: ET.Element,
+        media: str,
+        startNumber: Union[int, str],
+        base_url: str,
+    ) -> list[str]:
         ns = self.namespaces
-        SegmentTemplate = Representation.find("./mpd:SegmentTemplate", ns)
-        if SegmentTemplate is None:
-            raise ValueError("SegmentTemplate is None")
-
-        SegmentTimeline = SegmentTemplate.find("./mpd:SegmentTimeline", ns)
-        if SegmentTimeline is None:
-            raise ValueError("SegmentTimeline is None")
-
-        # Inicialización
-        media_pattern = base_url + SegmentTemplate.get("media", "")
-        start_number = int(SegmentTemplate.get("startNumber", 1))
+        media_pattern = media
 
         segments: List[str] = []
-        current_number = start_number
-
-        for S in SegmentTimeline.findall("mpd:S", ns):
+        current_number = int(startNumber)
+        for S in representation.findall(".//mpd:S", ns):
             repeat = int(S.get("r", 0))
             for _ in range(repeat + 1):
-                segments.append(media_pattern.replace("$Number$", str(current_number)))
+                url = urljoin(
+                    base_url, media_pattern.replace("$Number$", str(current_number))
+                )
+                segments.append(url)
                 current_number += 1
         return segments
 
-    def _extract_base_url(self, root) -> str:
+    def _extract_representations(
+        self, adaptationSet: ET.Element, base_url: str
+    ) -> list[Representation]:
         ns = self.namespaces
-        for BaseURL in root.findall(".//mpd:BaseURL", ns):
-            base_url = BaseURL.text
-            if urlparse(base_url).path != "/":
-                return base_url
-        raise ValueError("BaseURL is None")
+        representations: List[Representation] = []
+        for representation in adaptationSet.findall(".//mpd:Representation", ns):
+            representation_id = int(representation.attrib["id"])
+            codecs = representation.attrib["codecs"]
+            bandwidth = int(representation.attrib["bandwidth"])
 
-    def parse_mpd_representations(self, mpd_text: str) -> list[Representation]:
+            data_additional = self._extract_additional_from_childs(representation)
+            url_initial = urljoin(base_url, data_additional["initialization"])
+            media = data_additional["media"]
+            start_number = data_additional["startNumber"]
+            segments = self._extract_segments(
+                representation, media, start_number, base_url
+            )
+
+            frameRate = representation.get("frameRate", None)
+            audioSamplingRate = representation.get("audioSamplingRate", None)
+
+            height = representation.get("height", None)
+            height = int(height) if height else None
+
+            width = representation.get("width", None)
+            width = int(width) if width else None
+
+            representations.append(
+                Representation(
+                    id=representation_id,
+                    codecs=codecs,
+                    bandwidth=bandwidth,
+                    url_initial=url_initial,
+                    media=media,
+                    segments=segments,
+                    height=height,
+                    width=width,
+                    frameRate=frameRate,
+                    audioSamplingRate=audioSamplingRate,
+                )
+            )
+        return representations
+
+    def _extract_adaptation_sets(
+        self, period: ET.Element, base_url: str
+    ) -> list[AdaptationSet]:
+        ns = self.namespaces
+        adaptationSets: List[AdaptationSet] = []
+        for apdationSet in period.findall(".//mpd:AdaptationSet", ns):
+            adationSet_id = int(apdationSet.attrib["id"])
+            bitstreamSwitching = apdationSet.attrib["bitstreamSwitching"]
+            mimeType = apdationSet.attrib["mimeType"]
+            segmentAlignment = apdationSet.attrib["segmentAlignment"]
+            startWithSAP = apdationSet.attrib["startWithSAP"]
+            representations = self._extract_representations(apdationSet, base_url)
+
+            subsegmentAlignment = apdationSet.get("subsegmentAlignment", None)
+            subsegmentAlignment = (
+                bool(subsegmentAlignment)
+                if isinstance(subsegmentAlignment, str)
+                else None
+            )
+            subsegmentStartsWithSAP = apdationSet.get("subsegmentStartsWithSAP", None)
+            subsegmentStartsWithSAP = (
+                int(subsegmentStartsWithSAP)
+                if isinstance(subsegmentStartsWithSAP, str)
+                else None
+            )
+            lang = apdationSet.get("lang", None)
+
+            adaptationSets.append(
+                AdaptationSet(
+                    id=adationSet_id,
+                    bitstreamSwitching=bitstreamSwitching,
+                    mimeType=mimeType,
+                    segmentAlignment=segmentAlignment,
+                    startWithSAP=startWithSAP,
+                    representations=representations,
+                    subsegmentAlignment=subsegmentAlignment,
+                    subsegmentStartsWithSAP=subsegmentStartsWithSAP,
+                    lang=lang,
+                )
+            )
+        return adaptationSets
+
+    def _extract_periods(self, root: ET.Element) -> list[Period]:
+        ns = self.namespaces
+
+        periods: List[Period] = []
+        for period_element in root.findall(".//mpd:Period", ns):
+            period_id = period_element.attrib["id"]
+            start = period_element.attrib["start"]
+
+            baseurl = period_element.find("./mpd:BaseURL", ns)
+            assert baseurl is not None
+            base_url = cast(str, baseurl.text)
+            adaptationSets = self._extract_adaptation_sets(period_element, base_url)
+
+            periods.append(
+                Period(
+                    id=period_id,
+                    start=start,
+                    BaseURL=base_url,
+                    AdaptationSets=adaptationSets,
+                )
+            )
+        return periods
+
+    def parse_periods(self, mpd_text: str) -> list[Period]:
         """
         Este método analiza el contenido XML de un MPD para obtener detalles técnicos de cada representación de audio y video
         disponibles en los AdaptationSet del manifiesto. Entre los datos extraídos se incluyen: URLs de inicialización y segmentos,
@@ -136,55 +311,5 @@ class Dash:
         Raises:
             ValueError: Si no se encuentra o está vacío el elemento BaseURL requerido para construir las URLs absolutas.
         """
-
         root = ET.fromstring(mpd_text)  # type: ignore
-        ns = self.namespaces
-
-        Period = root.find("./mpd:Period", ns)
-        assert Period is not None, "Period is None"
-
-        count_periods = len(root.findall("./mpd:Period", ns))
-
-        period_id = Period.get("id", None)
-        base_url = self._extract_base_url(root)
-
-        reps = []
-        for AdaptationSet in root.findall(".//mpd:AdaptationSet", ns):
-            for Representation in AdaptationSet.findall("./mpd:Representation", ns):
-                is_switching = AdaptationSet.get("bitstreamSwitching", "none")
-                mimetype = AdaptationSet.get("mimeType", "none")
-
-                representation_id = int(Representation.get("id", "none"))
-                init_url = self._extract_url_init(Representation, base_url)
-                segments = self._extract_segments(Representation, base_url)
-                bandwidth = Representation.get("bandwidth", "none")
-
-                sampling_rate = Representation.get("audioSamplingRate", None)
-                sampling_rate = int(sampling_rate) if sampling_rate else None
-
-                codecs = Representation.get("codecs", None)
-                frame_rate = Representation.get("frameRate", None)
-
-                height = Representation.get("height", None)
-                height = int(height) if height else None
-                width = Representation.get("width", None)
-                width = int(width) if width else None
-
-                reps.append(
-                    {
-                        "representation_id": representation_id,
-                        "period_id": period_id,
-                        "init_url": init_url,
-                        "segments": segments,
-                        "mimetype": mimetype,
-                        "is_switching": is_switching,
-                        "sampling_rate": sampling_rate,
-                        "bandwidth": bandwidth,
-                        "codecs": codecs,
-                        "frame_rate": frame_rate,
-                        "height": height,
-                        "width": width,
-                        "count_periods": count_periods,
-                    }
-                )
-        return reps
+        return self._extract_periods(root)

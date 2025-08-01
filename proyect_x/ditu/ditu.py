@@ -1,16 +1,17 @@
 import logging
 import shutil
 import subprocess
+from dataclasses import asdict
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
-from typing import Tuple, Union, cast
+from typing import Optional, Tuple, Union, cast
 from urllib.parse import urlparse
 
 import requests
 from unidecode import unidecode
 
-from proyect_x.ditu.api.dash import Dash, Representation
+from proyect_x.ditu.api.dash import Dash, Period, Representation
 from proyect_x.ditu.schemas.simple_schedule import SimpleSchedule
 
 from .api.channel import DituChannel
@@ -50,31 +51,42 @@ class DituStream:
     ) -> Path:
         title_slug = unidecode(schedule.title.strip()).lower().replace(" ", ".")
         start = schedule.start_time.strftime("%Y_%m_%d.%I_%M.%p")
-        width = video_rep["height"]
+        width = video_rep.height
         folder_name = f"{title_slug}.capitulo.{schedule.episode_number}.ditu.live.{width}p.{start}"
         return base_output / folder_name
 
-    def _select_best_representation(self, reps: list, key: str) -> Representation:
-        return sorted(reps, key=lambda x: x.get(key) or 0, reverse=True)[0]
+    def _download_url_initial(self, url: str, base_output: Path) -> Path:
+        path = urlparse(url).path
+        init_path = base_output / Path(path).name
+        self._download_file_if_needed(url, init_path)
+        return init_path
 
-    def _download_representation_segments(
-        self, rep: Representation, base_output: Path
-    ) -> Tuple[Path, list[Path]]:
-        path = urlparse(rep["init_url"]).path
-        init_path = base_output.parent / Path(path).name
-        self._download_file_if_needed(rep["init_url"], init_path)
+    # def _download_representation_segments(
+    #     self, rep: Representation, base_output: Path
+    # ) -> Tuple[Path, list[Path]]:
+    #     path = urlparse(rep.url_initial).path
+    #     init_path = base_output.parent / Path(path).name
+    #     self._download_file_if_needed(rep.url_initial, init_path)
 
-        segmensts = []
-        for segment_url in rep["segments"]:
-            path = urlparse(segment_url).path
-            segment_path = base_output / Path(path).name
+    #     segmensts = []
+    #     for segment_url in rep.segments:
+    #         path = urlparse(segment_url).path
+    #         segment_path = base_output / Path(path).name
+    #         if self._download_file_if_needed(segment_url, segment_path):
+    #             segmensts.append(segment_path)
+    #     return init_path, segmensts
+
+    def _download_segments(self, segments: list[str], base_output: Path):
+        for segment_url in segments:
+            urlpath = urlparse(segment_url).path
+            segment_path = base_output / Path(urlpath).name
             if self._download_file_if_needed(segment_url, segment_path):
-                segmensts.append(segment_path)
-        return init_path, segmensts
+                pass
 
-    def _download_file_if_needed(self, url: str, path: Path):
+    def _download_file_if_needed(self, url: str, path: Path) -> bool:
+        """Devuelve True si y solo si ha descargado el archivo."""
         if path.exists():
-            return
+            return False
         try:
             response = requests.get(url, headers=HEADERS)
             response.raise_for_status()
@@ -84,62 +96,90 @@ class DituStream:
             return True
         except Exception as e:
             logger.error(f"❌ Error al descargar: {path}: {e}")
+            return False
+
+    def get_period_content(self, url) -> Period:
+        """Intenta devolver el Period que contiene el contenido (no comerciales), si no lo encuentra lo intenta 5 veces por 15 segundos."""
+        while True:
+            mpd = self.dash.fetch_mpd(url)
+            periods = self.dash.parse_periods(mpd)
+            if len(periods) == 1:
+                logger.info("Periodo de contenido encontrado")
+                return periods[0]
+            logger.info("Periodo unico no encontrado. Actualmente en comerciales")
+            sleep(1)
+
+    def _get_video_representation_from_periods(
+        self, periods, representation: Representation
+    ):
+        for period in periods:
+            for adapt in period.AdaptationSets:
+                if adapt.is_video:
+                    for rep in adapt.representations:
+                        if rep.media == representation.media:
+                            return rep
+        return None
+
+    def _get_audio_representation_from_periods(
+        self, periods, representation: Representation
+    ):
+        for period in periods:
+            for adapt in period.AdaptationSets:
+                if not adapt.is_video:
+                    for rep in adapt.representations:
+                        if rep.media == representation.media:
+                            return rep
+        return None
 
     def capture_schedule(self, schedule: SimpleSchedule, output_dir: Union[str, Path]):
         url = self.dash.get_live_channel_manifest(schedule.channel_id)
         output_dir = Path(output_dir) if isinstance(output_dir, str) else output_dir
         result = {
-            "video_init": None,
-            "video_segments": [],
-            "video_represenation_id": None,
-            "audio_init": None,
-            "audio_segments": [],
-            "audio_represenation_id": None,
+            "video_representation_id": None,
+            "audio_representation_id": None,
+            "folder_video": None,
+            "folder_audio": None,
+            "video_init_path": Optional[Path],
+            "audio_init_path": Optional[Path],
         }
-        representation_id = None
+        period_content = self.get_period_content(url)
+        best_rep_video = period_content.best_video_representation()
+        best_rep_audio = period_content.best_audio_representation()
+        output = self._build_output_path(schedule, output_dir, best_rep_video)
+
+        result["video_init_path"] = self._download_url_initial(
+            best_rep_video.url_initial, output
+        )
+        result["audio_init_path"] = self._download_url_initial(
+            best_rep_audio.url_initial, output
+        )
+        folder_video = output / "video"
+        folder_audio = output / "audio"
+        result["folder_video"] = folder_video
+        result["folder_audio"] = folder_audio
+        result["video_representation_id"] = best_rep_video.id
+        result["audio_representation_id"] = best_rep_audio.id
+
+        self._download_segments(best_rep_video.segments, folder_video)
+        self._download_segments(best_rep_audio.segments, folder_audio)
         while True:
-            if datetime.now() > schedule.end_time:
-                current = self.schedule.get_current_program_live(schedule.channel_id)
-                if current.end_time != schedule.end_time:
-                    logger.info(
-                        f"La finalizacion del programa ha cambiado: {schedule.title}"
-                    )
-                    schedule.airingEndTime = current.airingEndTime
-                    continue
-                else:
-                    logger.info(f"Programa terminado: {schedule.title}")
-                    break
+            current_time = datetime.now()
             mpd = self.dash.fetch_mpd(url)
-            reps = self.dash.parse_mpd_representations(mpd)
-            if reps[0]["count_periods"] == 1 and (
-                representation_id == reps[0]["representation_id"]
-                or representation_id is None
-            ):
-                if representation_id is None:
-                    representation_id = reps[0]["representation_id"]
-
-                video_rep = self._select_best_representation(reps, key="height")
-                output = self._build_output_path(schedule, output_dir, video_rep)
-                audio_rep = self._select_best_representation(reps, key="sampling_rate")
-
-                video_init, video_segments = self._download_representation_segments(
-                    video_rep, output / "video"
-                )
-                audio_init, audio_segments = self._download_representation_segments(
-                    audio_rep, output / "audio"
-                )
-                # -- Actualizar el diccionario con los datos de la captura --
-                result["video_init"] = video_init
-                result["video_segments"].extend(video_segments)
-                result["audio_init"] = audio_init
-                result["audio_segments"].extend(audio_segments)
-                result["video_represenation_id"] = video_rep["representation_id"]
-                result["audio_represenation_id"] = audio_rep["representation_id"]
-
-            sleep(1)  # TODO: reemplazar por el valor recomendado del manifest
+            periods = self.dash.parse_periods(mpd)
+            video_rep = self._get_video_representation_from_periods(
+                periods, best_rep_video
+            )
+            audio_rep = self._get_audio_representation_from_periods(
+                periods, best_rep_audio
+            )
+            if video_rep and audio_rep:
+                self._download_segments(video_rep.segments, folder_video)
+                self._download_segments(audio_rep.segments, folder_audio)
+            sleep(1)
+            if current_time > schedule.end_time + timedelta(seconds=15):
+                break
 
         self.cleanup_audio_segments_without_video(result)
-
         return result
 
     def cleanup_audio_segments_without_video(self, result: dict):
@@ -150,10 +190,10 @@ class DituStream:
             result (dict): Diccionario con claves 'video_segments' y 'audio_segments',
                         cada uno conteniendo una lista de rutas a archivos por segmento.
         """
-        v_rep_id = result["video_represenation_id"]
-        a_rep_id = result["audio_represenation_id"]
-        folder_video: Path = result["video_segments"][0].parent
-        folder_audio: Path = result["audio_segments"][0].parent
+        v_rep_id = result["video_representation_id"]
+        a_rep_id = result["audio_representation_id"]
+        folder_video: Path = result["folder_video"]
+        folder_audio: Path = result["folder_audio"]
 
         video_match = f"index_video_{v_rep_id}"
         video_index_map = {
@@ -184,21 +224,24 @@ class DituStream:
             path.unlink()
 
     def combine_and_merge(self, result: dict):
-        folder = result["video_init"].parent
-        video_path = folder / ("video_combibed" + result["video_init"].suffix)
+        video_init_path = result["video_init_path"]
+        audio_init_path = result["audio_init_path"]
+        folder = video_init_path.parent
+
+        video_path = folder / ("video_combibed" + video_init_path.suffix)
         with open(video_path, "wb") as fp:
-            fp.write(result["video_init"].read_bytes())
-            segment_folder = result["video_segments"][0].parent
-            segments: list[Path] = [i for i in segment_folder.iterdir() if i.is_file()]
+            fp.write(video_init_path.read_bytes())
+            folder_video = result["folder_video"]
+            segments: list[Path] = [i for i in folder_video.iterdir() if i.is_file()]
             segments.sort(key=lambda x: x.stat().st_mtime)
             for segment in segments:
                 fp.write(segment.read_bytes())
 
-        audio_path = folder / ("audio_combibed" + result["audio_init"].suffix)
+        audio_path = folder / ("audio_combibed" + audio_init_path.suffix)
         with open(audio_path, "wb") as fp:
-            fp.write(result["audio_init"].read_bytes())
-            segment_folder = result["audio_segments"][0].parent
-            segments = [i for i in segment_folder.iterdir() if i.is_file()]
+            fp.write(audio_init_path.read_bytes())
+            folder_audio = result["folder_audio"]
+            segments = [i for i in folder_audio.iterdir() if i.is_file()]
             segments.sort(key=lambda x: x.stat().st_mtime)
             for segment in segments:
                 fp.write(segment.read_bytes())
