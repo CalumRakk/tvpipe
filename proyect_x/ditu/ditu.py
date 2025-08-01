@@ -12,7 +12,7 @@ import requests
 from unidecode import unidecode
 
 from proyect_x.ditu.api.dash import Dash, Period, Representation
-from proyect_x.ditu.schemas.simple_schedule import SimpleSchedule
+from proyect_x.ditu.schemas.simple_schedule import CurrentSchedule, SimpleSchedule
 
 from .api.channel import DituChannel
 from .api.schedule import DituSchedule
@@ -163,7 +163,7 @@ class DituStream:
         self._download_segments(best_rep_video.segments, folder_video)
         self._download_segments(best_rep_audio.segments, folder_audio)
         while True:
-            current_time = datetime.now()
+            time_capture = datetime.now()
             mpd = self.dash.fetch_mpd(url)
             periods = self.dash.parse_periods(mpd)
             video_rep = self._get_video_representation_from_periods(
@@ -176,11 +176,35 @@ class DituStream:
                 self._download_segments(video_rep.segments, folder_video)
                 self._download_segments(audio_rep.segments, folder_audio)
             sleep(1)
-            if current_time > schedule.end_time + timedelta(seconds=15):
-                break
+            if self.is_finished(time_capture, schedule):
+                current = self.schedule.get_current_program_live(schedule.channel_id)
+                if self.is_end_difference(schedule, current):
+                    logger.info(
+                        f"La finalizacion del programa ha cambiado: {schedule.title}"
+                    )
+                    schedule.airingEndTime = current.airingEndTime
+                    continue
+                else:
+                    break
 
         self.cleanup_audio_segments_without_video(result)
         return result
+
+    def is_finished(self, time_capture, schedule: SimpleSchedule) -> bool:
+        if time_capture > schedule.end_time:
+            return True
+        return False
+
+    def is_end_difference(
+        self, schedule: SimpleSchedule, current: CurrentSchedule
+    ) -> bool:
+        if schedule.content_id == current.content_id:
+            if schedule.end_time != current.end_time:
+                logger.info(
+                    f"La finalizacion del programa ha cambiado: {schedule.title}"
+                )
+                return True
+        return False
 
     def cleanup_audio_segments_without_video(self, result: dict):
         """

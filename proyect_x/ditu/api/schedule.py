@@ -93,7 +93,7 @@ class DituSchedule:
     def _extract_simpleprogram(self, program_item: ProgramItem) -> SimpleSchedule:
 
         data = program_item["metadata"]
-        channel_info = program_item["channel"]
+        channel_info = cast(dict, program_item["channel"])
         airingStartTime = data["airingStartTime"]
         end_time = data["airingEndTime"]
         title = data["title"]

@@ -18,6 +18,10 @@ class CurrentSchedule(BaseModel):
     channel_info: dict
 
     @property
+    def content_id(self) -> int:
+        return self.contentId
+
+    @property
     def start_time(self) -> datetime:
         return datetime.fromtimestamp(self.airingStartTime / 1000)
 
