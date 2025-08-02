@@ -82,21 +82,19 @@ def run_supervisor():
     schedules = fetch_updated_schedules(ditu, channel_id)
     captured_ids: Set[int] = set()
     manager = ProcessManager(MAX_PROCESSES)
-    last_refresh = time.time()
 
     logger.info("🎬 Iniciando supervisor de capturas inteligentes...")
 
     while True:
-        if time.time() - last_refresh >= REFRESH_INTERVAL:
-            new_schedules = fetch_updated_schedules(ditu, channel_id)
-            schedules = update_schedule_list(schedules, new_schedules)
-            last_refresh = time.time()
+        # if time.time() - last_refresh >= REFRESH_INTERVAL:
+        #     new_schedules = fetch_updated_schedules(ditu, channel_id)
+        #     schedules = update_schedule_list(schedules, new_schedules)
+        #     last_refresh = time.time()
 
         manager.cleanup()
 
         if manager.can_start():
-            schedules_fildered = filter_schedule_finished(schedules)
-            for schedule in schedules_fildered:
+            for schedule in filter_schedule_finished(schedules):
                 if schedule.content_id in captured_ids:
                     continue
 
@@ -106,8 +104,6 @@ def run_supervisor():
                     manager.start(capture_process, schedule_copy)
                     captured_ids.add(schedule.content_id)
                     break
-
-        logger.info(f"🕒 Esperando {CHECK_INTERVAL} segundos...")
         time.sleep(CHECK_INTERVAL)
 
 

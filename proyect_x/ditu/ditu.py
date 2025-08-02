@@ -180,7 +180,7 @@ class DituStream:
                 if self.is_program_airing_finished(time_capture, schedule):
                     break
 
-                sleep(1)
+                sleep(2)
             except requests.exceptions.ConnectionError as e:
                 logger.error(f"❌ Error de red: {e}")
                 sleep(1)
@@ -218,27 +218,30 @@ class DituStream:
             return False
 
         current = self.schedule.get_current_program_live(schedule.channel_id)
-
-        logger.debug(
-            f"[{schedule.channel_id}] Comparando programación actual: "
-            f"captured={schedule.content_id}, current={current.content_id}, "
-            f"old_end_time={schedule.end_time}, new_end_time={current.end_time}"
-        )
-
         is_same_program = schedule.content_id == current.content_id
-        has_new_end_time = schedule.end_time != current.end_time
-
-        if is_same_program and has_new_end_time:
-            schedule.airingEndTime = current.airingEndTime
-            if time_capture > current.end_time:
-                logger.info(
-                    f"[{schedule.channel_id}] La emisión del programa ha finalizado. "
-                    f"Finalizó a las {current.end_time}, captura a las {time_capture}"
-                )
-                return True
+        if is_same_program:
             return False
-        else:
-            return True
+        return True
+        # logger.debug(
+        #     f"[{schedule.channel_id}] Comparando programación actual: "
+        #     f"captured={schedule.content_id}, current={current.content_id}, "
+        #     f"old_end_time={schedule.end_time}, new_end_time={current.end_time}"
+        # )
+
+        # is_same_program = schedule.content_id == current.content_id
+        # has_new_end_time = schedule.end_time != current.end_time
+        # if not is_same_program:
+        #     return True
+        # elif has_new_end_time and is_same_program:
+        #     schedule.airingEndTime = current.airingEndTime
+        #     if time_capture > (current.end_time + timedelta(seconds=15)):
+        #         logger.info(
+        #             f"[{schedule.channel_id}] La emisión del programa ha finalizado. "
+        #             f"Finalizó a las {current.end_time}, captura a las {time_capture}"
+        #         )
+        #         return True
+        #     return False
+        # return True
 
     def is_end_difference(
         self, schedule: SimpleSchedule, current: CurrentSchedule
@@ -288,6 +291,56 @@ class DituStream:
         for path in unmatched_audio + unmatched_video:
             logger.info(f"Eliminando segmento sin pareja: {path}")
             path.unlink()
+
+    def combine_and_merge_by_folder(self, folder: Union[Path, str]):
+        folder = Path(folder) if isinstance(folder, str) else folder
+
+        video_init = [i for i in folder.iterdir() if i.is_file() and "video" in i.name][
+            0
+        ]
+        audio_init = [i for i in folder.iterdir() if i.is_file() and "audio" in i.name][
+            0
+        ]
+
+        folder_video = folder / "video"
+        folder_audio = folder / "audio"
+
+        output_video_combined = folder / "video_combibed.mp4"
+        output_audio_combined = folder / "audio_combibed.mp4"
+
+        with open(output_video_combined, "wb") as fp:
+            fp.write(video_init.read_bytes())
+            segments: list[Path] = [i for i in folder_video.iterdir() if i.is_file()]
+            segments.sort(key=lambda x: x.stat().st_mtime)
+            for segment in segments[:-10]:
+                fp.write(segment.read_bytes())
+
+        with open(output_audio_combined, "wb") as fp:
+            fp.write(audio_init.read_bytes())
+            segments: list[Path] = [i for i in folder_audio.iterdir() if i.is_file()]
+            segments.sort(key=lambda x: x.stat().st_mtime)
+            for segment in segments[:-10]:
+                fp.write(segment.read_bytes())
+
+        output = (folder.parent / folder.name).with_suffix(video_init.suffix)
+        cmd = [
+            "ffmpeg",
+            "-loglevel",
+            "error",
+            "-i",
+            str(output_video_combined),
+            "-i",
+            str(output_audio_combined),
+            "-c:v",
+            "copy",
+            "-c:a",
+            "copy",
+            "-shortest",
+            str(output),
+        ]
+        subprocess.run(cmd, check=True)
+        output_video_combined.unlink()
+        output_audio_combined.unlink()
 
     def combine_and_merge(self, result: dict):
         video_init_path = result["video_init_path"]
