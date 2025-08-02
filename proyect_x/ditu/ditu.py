@@ -50,11 +50,9 @@ class DituStream:
         self, schedule: SimpleSchedule, base_output: Path, video_rep: Representation
     ) -> Path:
         title_slug = unidecode(schedule.title.strip()).lower().replace(" ", ".")
-        day = datetime.now().strftime("%Y_%m_%d")
-        start = datetime.now().strftime("%H_%M_%S")
-        end = schedule.start_time.strftime("%H_%M_%S")
+        start = schedule.start_time.isoformat().replace(":", ".").replace("T", ".")
         width = video_rep.height
-        folder_name = f"{title_slug}.capitulo.{schedule.episode_number}.ditu.live.{width}p.{day}.{start}_to_{end}"
+        folder_name = f"{title_slug}.capitulo.{schedule.episode_number}.ditu.live.{width}p.{start}.content_id={schedule.content_id}"
         return base_output / folder_name
 
     def _download_url_initial(self, url: str, base_output: Path) -> Path:

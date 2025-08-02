@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pydantic import BaseModel
 
@@ -97,3 +97,15 @@ class SimpleSchedule(BaseModel):
     @property
     def channel_name(self) -> str:
         return self.channel_info["channelName"]
+
+    @property
+    def has_started(self) -> bool:
+        """True y solo True si el programa se considerá como "Iniciado".
+        Se considera como "Iniciado" si el programa está en emision o falta menos de un minuto para comenzar.
+
+        Si el programa ha finalizado, no se considera "Iniciado".
+        """
+        start = self.start_time - timedelta(minutes=1)
+        has_finished_program = self.end_time <= datetime.now()
+        is_on_air = (start <= datetime.now()) and (not has_finished_program)
+        return is_on_air

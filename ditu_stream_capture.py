@@ -1,80 +1,115 @@
+import copy
 import logging
-from datetime import datetime, time, timedelta
+import time
+from datetime import datetime
+from multiprocessing import Process
 from pathlib import Path
-from typing import List
-
-from unidecode import unidecode
+from typing import List, Set
 
 from proyect_x.ditu.ditu import DituStream
 from proyect_x.ditu.schemas.simple_schedule import SimpleSchedule
 from proyect_x.logging_config import setup_logging
-from proyect_x.yt_downloader.core.common import sleep_progress
+
+# Configuracion
+CHANNEL_NAME = "Club"
+OUTPUT_DIR = "output/test"
+CHECK_INTERVAL = 10  # segundos
+REFRESH_INTERVAL = 10 * 60  # segundos (10 minutos)
+TRIGGER_WINDOW = 5 * 60  # segundos (5 minutos antes del inicio)
+MAX_PROCESSES = 2
 
 
-def get_target(
-    targets: list[str],
-    schedules: list[SimpleSchedule],
-):
-    candicates = []
-    for schedule in schedules:
-        for target in targets:
-            if unidecode(target).lower() in unidecode(schedule.title).lower():
-                candicates.append(schedule)
-    return candicates
+class ProcessManager:
+    def __init__(self, max_workers: int = 2):
+        self.max_workers = max_workers
+        self.active: List[Process] = []
+
+    def cleanup(self):
+        self.active = [p for p in self.active if p.is_alive()]
+
+    def can_start(self):
+        self.cleanup()
+        return len(self.active) < self.max_workers
+
+    def start(self, func, *args):
+        if self.can_start():
+            p = Process(target=func, args=args)
+            p.start()
+            self.active.append(p)
+            return True
+        return False
 
 
-def should_wait_for_publication(start_time: datetime):
-    """Espera hasta la hora de lanzamiento del capítulo (especificada en release_time)."""
-    today = datetime.now()
-    if today < start_time:
-        return True
-    return False
+def fetch_updated_schedules(ditu: DituStream, channel_id: int) -> List[SimpleSchedule]:
+    logger = logging.getLogger(__name__)
+    logger.info("🔄 Actualizando programación del canal...")
+    return ditu.get_schedule(channel_id)
 
 
-def wait_release(start_time: datetime):
-    """Espera hasta la hora de lanzamiento del capítulo (especificada en release_time)."""
-    today = datetime.now()
-    difference = start_time - today
-    logger.info(
-        f"Hora de publicacion del capitulo en youtube: {start_time.strftime('%I:%M %p')}"
-    )
-    sleep_progress(difference.total_seconds())
-    return False
+def update_schedule_list(
+    current: List[SimpleSchedule], new: List[SimpleSchedule]
+) -> List[SimpleSchedule]:
+    updated_map = {s.content_id: s for s in new}
+    current_map = {s.content_id: s for s in current}
+
+    for cid, schedule in updated_map.items():
+        current_map[cid] = schedule
+
+    return list(current_map.values())
 
 
-if __name__ == "__main__":
+def capture_process(schedule: SimpleSchedule):
+    ditu = DituStream()
+    logger = logging.getLogger(__name__)
+    logger.info(f"📡 Iniciando captura: {schedule.title}")
+    result = ditu.capture_schedule(schedule, OUTPUT_DIR)
+    ditu.combine_and_merge(result)
+    logger.info(f"✅ Captura finalizada: {schedule.title}")
 
+
+def filter_schedule_finished(schedules: List[SimpleSchedule]) -> List[SimpleSchedule]:
+    return [s for s in schedules if s.end_time > datetime.now()]
+
+
+def run_supervisor():
     setup_logging(f"logs/{Path(__file__).stem}.log")
     logger = logging.getLogger(__name__)
 
     ditu = DituStream()
-    channel_info = ditu.channel.get_info("Club")
-    schedules = ditu.get_schedule(channel_info["channelId"])
-    programs: List[SimpleSchedule] = [
-        schedule
-        for schedule in schedules
-        if "Desafío Siglo XXI" in schedule.title
-        or "Pre-Desafío" in schedule.title
-        or "Post Desafío" in schedule.title
-        or "Tour" in schedule.title
-        or "Club" in schedule.title
-        or "Suite" in schedule.title
-        or True
-    ]
+    channel_info = ditu.channel.get_info(CHANNEL_NAME)
+    channel_id = channel_info["channelId"]
 
-    for schule in programs:
-        start_time = schule.start_time
-        end_time = schule.end_time
+    schedules = fetch_updated_schedules(ditu, channel_id)
+    captured_ids: Set[int] = set()
+    manager = ProcessManager(MAX_PROCESSES)
+    last_refresh = time.time()
 
-        if should_wait_for_publication(start_time):
-            wait_release(start_time)
-            print(
-                f"Esperando hasta la hora de lanzamiento: {start_time.strftime('%I:%M %p')}"
-            )
-        elif datetime.now() >= end_time:
-            logger.info("El capítulo ya ha sido capturado.")
-            continue
+    logger.info("🎬 Iniciando supervisor de capturas inteligentes...")
 
-        logger.info(f"Publicando el capitulo: {schule.title}")
-        result = ditu.capture_schedule(schule, "output/test")
-        ditu.combine_and_merge(result)
+    while True:
+        if time.time() - last_refresh >= REFRESH_INTERVAL:
+            new_schedules = fetch_updated_schedules(ditu, channel_id)
+            schedules = update_schedule_list(schedules, new_schedules)
+            last_refresh = time.time()
+
+        manager.cleanup()
+
+        if manager.can_start():
+            schedules_fildered = filter_schedule_finished(schedules)
+            for schedule in schedules_fildered:
+                if schedule.content_id in captured_ids:
+                    continue
+
+                if schedule.has_started:
+                    logger.info(f"🚀 Lanzando proceso de captura: {schedule.title}")
+                    schedule_copy = copy.deepcopy(schedule)
+                    manager.start(capture_process, schedule_copy)
+                    captured_ids.add(schedule.content_id)
+                    break
+
+        logger.info(f"🕒 Esperando {CHECK_INTERVAL} segundos...")
+        time.sleep(CHECK_INTERVAL)
+
+
+if __name__ == "__main__":
+    run_supervisor()
