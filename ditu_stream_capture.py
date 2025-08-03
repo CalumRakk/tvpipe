@@ -110,8 +110,7 @@ def run_supervisor():
                         f"Contenido emitido actualmente: {c_schedule.content_id}, {c_schedule.title}"
                     )
                     schedule_copy = copy.deepcopy(schedule)
-                    # manager.start(capture_process, schedule_copy)
-                    capture_process(schedule_copy)
+                    manager.start(capture_process, schedule_copy)
                     captured_ids.add(schedule.content_id)
                     break
         time.sleep(CHECK_INTERVAL)

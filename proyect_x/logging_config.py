@@ -5,7 +5,7 @@ import sys
 
 def logger_formatter() -> logging.Formatter:
     formatter = logging.Formatter(
-        "%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
+        "%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%d-%m-%Y %I:%M:%S %p",
     )
     return formatter

@@ -135,9 +135,10 @@ class Dash:
         return url
 
     def fetch_mpd(self, url: str) -> str:
+        logger.info(f"Descargando MPD: {url}")
         response = requests.get(url, headers=HEADERS)
         response.raise_for_status()
-        logger.info(f"📄 MPD descargado correctamente: {url}")
+        logger.info(f"📄 MPD descargado correctamente")
         return response.text
 
     # def _extract_base_url(self, root) -> str:
@@ -188,9 +189,6 @@ class Dash:
                 )
                 segments.append(url)
                 current_number += 1
-                logger.info(
-                    f"🔗 current_numer={current_number} Segmento encontrado: {url}"
-                )
         return segments
 
     def _extract_representations(
@@ -220,7 +218,7 @@ class Dash:
             width = representation.get("width", None)
             width = int(width) if width else None
 
-            logger.info(
+            logger.debug(
                 f"📦 Representación encontrada: {representation_id}, "
                 f"codecs: {codecs}, bandwidth: {bandwidth}, "
                 f"init_url: {url_initial}, segments: {len(segments)}"
@@ -291,14 +289,14 @@ class Dash:
         for period_element in root.findall(".//mpd:Period", ns):
             period_id = period_element.attrib["id"]
             start = period_element.attrib["start"]
-            logger.info(f"📦 Periodo encontrado: {period_id}, start: {start}")
 
             baseurl = period_element.find("./mpd:BaseURL", ns)
             assert baseurl is not None
             base_url = cast(str, baseurl.text)
-            logger.info(f"🔗 BaseURL del periodo: {base_url}")
+
             adaptationSets = self._extract_adaptation_sets(period_element, base_url)
 
+            logger.debug(f"📦 Periodo parseado: Id {period_id} | BaseUrl {base_url}")
             periods.append(
                 Period(
                     id=period_id,
