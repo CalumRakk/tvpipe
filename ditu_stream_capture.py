@@ -1,7 +1,7 @@
 import copy
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from multiprocessing import Process
 from pathlib import Path
 from typing import List, Set
@@ -14,7 +14,7 @@ from proyect_x.logging_config import setup_logging
 CHANNEL_NAME = "Club"
 OUTPUT_DIR = "output/test"
 CHECK_INTERVAL = 10  # segundos
-REFRESH_INTERVAL = 10 * 60  # segundos (10 minutos)
+REFRESH_INTERVAL = 20 * 60  # segundos (10 minutos)
 TRIGGER_WINDOW = 5 * 60  # segundos (5 minutos antes del inicio)
 MAX_PROCESSES = 2
 
@@ -59,12 +59,17 @@ def update_schedule_list(
 
 
 def capture_process(schedule: SimpleSchedule):
+    logger = setup_logging(
+        f"logs/{Path(__file__).stem}.schedule_id={schedule.content_id}.log"
+    )
     ditu = DituStream()
     logger = logging.getLogger(__name__)
-    logger.info(f"📡 Iniciando captura: {schedule.title}")
+    logger.info(
+        f"🔍 Iniciando captura de la programación: {schedule.title} ({schedule.content_id})"
+    )
     result = ditu.capture_schedule(schedule, OUTPUT_DIR)
     ditu.combine_and_merge(result)
-    logger.info(f"✅ Captura finalizada: {schedule.title}")
+    logger.info(f"✅ Captura finalizada: {schedule.content_id}")
 
 
 def filter_schedule_finished(schedules: List[SimpleSchedule]) -> List[SimpleSchedule]:
@@ -82,14 +87,15 @@ def run_supervisor():
     schedules = fetch_updated_schedules(ditu, channel_id)
     captured_ids: Set[int] = set()
     manager = ProcessManager(MAX_PROCESSES)
+    last_refresh = time.time()
 
     logger.info("🎬 Iniciando supervisor de capturas inteligentes...")
 
     while True:
-        # if time.time() - last_refresh >= REFRESH_INTERVAL:
-        #     new_schedules = fetch_updated_schedules(ditu, channel_id)
-        #     schedules = update_schedule_list(schedules, new_schedules)
-        #     last_refresh = time.time()
+        if time.time() - last_refresh >= REFRESH_INTERVAL:
+            new_schedules = fetch_updated_schedules(ditu, channel_id)
+            schedules = update_schedule_list(schedules, new_schedules)
+            last_refresh = time.time()
 
         manager.cleanup()
 
@@ -99,9 +105,13 @@ def run_supervisor():
                     continue
 
                 if schedule.has_started:
-                    logger.info(f"🚀 Lanzando proceso de captura: {schedule.title}")
+                    c_schedule = ditu.schedule.get_current_program_live(channel_id)
+                    logger.info(
+                        f"Contenido emitido actualmente: {c_schedule.content_id}, {c_schedule.title}"
+                    )
                     schedule_copy = copy.deepcopy(schedule)
-                    manager.start(capture_process, schedule_copy)
+                    # manager.start(capture_process, schedule_copy)
+                    capture_process(schedule_copy)
                     captured_ids.add(schedule.content_id)
                     break
         time.sleep(CHECK_INTERVAL)

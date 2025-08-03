@@ -1,3 +1,4 @@
+import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,7 @@ HEADERS = {
     "Accept-Encoding": "gzip, deflate, br",
     "User-Agent": "okhttp/4.12.0",
 }
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -78,13 +80,21 @@ class Period:
     def best_video_representation(self, key: Optional[str] = None) -> Representation:
         for adapt in self.AdaptationSets:
             if adapt.is_video:
-                return adapt.get_best_representation()
+                repr = adapt.get_best_representation()
+                logger.info(
+                    f"🔍 Mejor representación de video: {repr.id}, {repr.height}p, {repr.bandwidth}bps"
+                )
+                return repr
         raise ValueError("No hay representaciones de video")
 
     def best_audio_representation(self, key: Optional[str] = None) -> Representation:
         for adapt in self.AdaptationSets:
             if not adapt.is_video:
-                return adapt.get_best_representation()
+                repre = adapt.get_best_representation()
+                logger.info(
+                    f"🔍 Mejor representación de audio: {repre.id}, {repre.audioSamplingRate}Hz, {repre.bandwidth}bps"
+                )
+                return repre
         raise ValueError("No hay representaciones de audio")
 
 
@@ -119,11 +129,15 @@ class Dash:
         response.raise_for_status()
 
         data: DashManifestResponse = response.json()
-        return data["resultObj"]["src"]
+        url = data["resultObj"]["src"]
+
+        logger.info(f"🔗 URL del DASH manifest: {url}")
+        return url
 
     def fetch_mpd(self, url: str) -> str:
         response = requests.get(url, headers=HEADERS)
         response.raise_for_status()
+        logger.info(f"📄 MPD descargado correctamente: {url}")
         return response.text
 
     # def _extract_base_url(self, root) -> str:
@@ -166,7 +180,7 @@ class Dash:
 
         segments: List[str] = []
         current_number = int(startNumber)
-        for S in representation.findall(".//mpd:S", ns):
+        for index, S in enumerate(representation.findall(".//mpd:S", ns)):
             repeat = int(S.get("r", 0))
             for _ in range(repeat + 1):
                 url = urljoin(
@@ -174,6 +188,9 @@ class Dash:
                 )
                 segments.append(url)
                 current_number += 1
+                logger.info(
+                    f"🔗 current_numer={current_number} Segmento encontrado: {url}"
+                )
         return segments
 
     def _extract_representations(
@@ -203,6 +220,12 @@ class Dash:
             width = representation.get("width", None)
             width = int(width) if width else None
 
+            logger.info(
+                f"📦 Representación encontrada: {representation_id}, "
+                f"codecs: {codecs}, bandwidth: {bandwidth}, "
+                f"init_url: {url_initial}, segments: {len(segments)}"
+                f", height: {height}, width: {width}, "
+            )
             representations.append(
                 Representation(
                     id=representation_id,
@@ -268,10 +291,12 @@ class Dash:
         for period_element in root.findall(".//mpd:Period", ns):
             period_id = period_element.attrib["id"]
             start = period_element.attrib["start"]
+            logger.info(f"📦 Periodo encontrado: {period_id}, start: {start}")
 
             baseurl = period_element.find("./mpd:BaseURL", ns)
             assert baseurl is not None
             base_url = cast(str, baseurl.text)
+            logger.info(f"🔗 BaseURL del periodo: {base_url}")
             adaptationSets = self._extract_adaptation_sets(period_element, base_url)
 
             periods.append(
@@ -282,6 +307,7 @@ class Dash:
                     AdaptationSets=adaptationSets,
                 )
             )
+        logger.info(f"📦 Periodos extraidos del MPD: {len(periods)}")
         return periods
 
     def parse_periods(self, mpd_text: str) -> list[Period]:

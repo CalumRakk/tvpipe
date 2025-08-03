@@ -40,6 +40,7 @@ class DituStream:
             list[SimpleSchedule]: Programación del dia de un canal de la TV.
 
         """
+        logger = logging.getLogger(__name__)
         is_string = True if isinstance(channel, str) else False
         if is_string:
             return self.schedule.get_schedule_by_name(channel)
@@ -49,16 +50,25 @@ class DituStream:
     def _build_output_path(
         self, schedule: SimpleSchedule, base_output: Path, video_rep: Representation
     ) -> Path:
+        logger = logging.getLogger(__name__)
         title_slug = unidecode(schedule.title.strip()).lower().replace(" ", ".")
         start = schedule.start_time.isoformat().replace(":", ".").replace("T", ".")
         width = video_rep.height
         folder_name = f"{title_slug}.capitulo.{schedule.episode_number}.ditu.live.{width}p.{start}.content_id={schedule.content_id}"
+        logger.info(f"📂 Carpeta de salida: {folder_name}")
         return base_output / folder_name
 
     def _download_url_initial(self, url: str, base_output: Path) -> Path:
+        logger = logging.getLogger(__name__)
+        logger.info(f"🔗 Descargando URL inicial: {url}")
         path = urlparse(url).path
         init_path = base_output / Path(path).name
-        self._download_file_if_needed(url, init_path)
+        if self._download_file_if_needed(url, init_path):
+            logger.info(f"✅ Descargado: {init_path.parent.name}/{init_path.name}")
+        else:
+            logger.info(
+                f"No se descargó el archivo: {init_path.parent.name}/{init_path.name}"
+            )
         return init_path
 
     # def _download_representation_segments(
@@ -77,15 +87,21 @@ class DituStream:
     #     return init_path, segmensts
 
     def _download_segments(self, segments: list[str], base_output: Path):
+        logger = logging.getLogger(__name__)
         for segment_url in segments:
             urlpath = urlparse(segment_url).path
             segment_path = base_output / Path(urlpath).name
+            logger.info(f"🔗 Descargando segmento: {segment_path.name}")
             if self._download_file_if_needed(segment_url, segment_path):
-                pass
+                logger.info(
+                    f"✅ Descargado: {segment_path.parent.name}/{segment_path.name}"
+                )
 
     def _download_file_if_needed(self, url: str, path: Path) -> bool:
         """Devuelve True si y solo si ha descargado el archivo."""
+        logger = logging.getLogger(__name__)
         if path.exists():
+            logger.info(f"Archivo ya existe: {path.parent.name}/{path.name}")
             return False
         try:
             response = requests.get(url, headers=HEADERS)
@@ -98,40 +114,73 @@ class DituStream:
             logger.error(f"❌ Error al descargar: {path}: {e}")
             return False
 
-    def get_period_content(self, url) -> Period:
+    def get_period_content(self, url) -> Tuple[Period, list[Period]]:
         """Intenta devolver el Period que contiene el contenido (no comerciales), si no lo encuentra lo intenta 5 veces por 15 segundos."""
+        logger = logging.getLogger(__name__)
+        archive = []
         while True:
             mpd = self.dash.fetch_mpd(url)
             periods = self.dash.parse_periods(mpd)
+            archive.extend(periods)
             if len(periods) == 1:
                 logger.info("Periodo de contenido encontrado")
-                return periods[0]
+                return periods[0], archive
             logger.info("Periodo unico no encontrado. Actualmente en comerciales")
-            sleep(1)
+            sleep(2)
 
-    def _get_video_representation_from_periods(
+    def _get_videorepresentation_from_periods(
         self, periods, representation: Representation
     ):
+        repres = self._get_videorepresentations_from_periods(periods, representation)
+        if len(repres) >= 1:
+            return repres[0]
+        return None
+
+    def _get_videorepresentations_from_periods(
+        self, periods, representation: Representation
+    ) -> list[Representation]:
+        repres = []
         for period in periods:
             for adapt in period.AdaptationSets:
                 if adapt.is_video:
                     for rep in adapt.representations:
                         if rep.media == representation.media:
-                            return rep
-        return None
+                            logger.info(
+                                f"✅ Representación de video encontrada: {rep.id}"
+                            )
+                            repres.append(rep)
 
-    def _get_audio_representation_from_periods(
+        return repres
+
+    def _get_audiorepresentation_from_periods(
         self, periods, representation: Representation
     ):
+        repres = self._get_audiorepresentations_from_periods(periods, representation)
+        if len(repres) >= 1:
+            return repres[0]
+        return None
+
+    def _get_audiorepresentations_from_periods(
+        self, periods, representation: Representation
+    ) -> list[Representation]:
+        repres = []
         for period in periods:
             for adapt in period.AdaptationSets:
                 if not adapt.is_video:
                     for rep in adapt.representations:
                         if rep.media == representation.media:
-                            return rep
-        return None
+                            logger.info(
+                                f"✅ Representación de audio encontrada: {rep.id}"
+                            )
+                            repres.append(rep)
+
+        return repres
 
     def capture_schedule(self, schedule: SimpleSchedule, output_dir: Union[str, Path]):
+        logger = logging.getLogger(__name__)
+        logger.info(
+            f"Preparando datos iniciales para la captura del schedule: {schedule.content_id}"
+        )
         url = self.dash.get_live_channel_manifest(schedule.channel_id)
         output_dir = Path(output_dir) if isinstance(output_dir, str) else output_dir
         result = {
@@ -142,7 +191,7 @@ class DituStream:
             "video_init_path": Optional[Path],
             "audio_init_path": Optional[Path],
         }
-        period_content = self.get_period_content(url)
+        period_content, periods = self.get_period_content(url)
         best_rep_video = period_content.best_video_representation()
         best_rep_audio = period_content.best_audio_representation()
         output = self._build_output_path(schedule, output_dir, best_rep_video)
@@ -160,27 +209,46 @@ class DituStream:
         result["video_representation_id"] = best_rep_video.id
         result["audio_representation_id"] = best_rep_audio.id
 
-        self._download_segments(best_rep_video.segments, folder_video)
-        self._download_segments(best_rep_audio.segments, folder_audio)
+        logger.info(f"Datos iniciales preparados: {result}")
+        logger.info("-" * 50)
+        logger.info(f"Iniciando descarga de segmentos...")
+
+        video_reps = self._get_videorepresentations_from_periods(
+            periods, best_rep_video
+        )
+        audio_reps = self._get_audiorepresentations_from_periods(
+            periods, best_rep_audio
+        )
+        for video_rep in video_reps:
+            for audio_rep in audio_reps:
+                self._download_segments(video_rep.segments, folder_video)
+                self._download_segments(audio_rep.segments, folder_audio)
+
         while True:
             try:
                 time_capture = datetime.now()
                 mpd = self.dash.fetch_mpd(url)
                 periods = self.dash.parse_periods(mpd)
-                video_rep = self._get_video_representation_from_periods(
+                video_rep = self._get_videorepresentation_from_periods(
                     periods, best_rep_video
                 )
-                audio_rep = self._get_audio_representation_from_periods(
+                audio_rep = self._get_audiorepresentation_from_periods(
                     periods, best_rep_audio
                 )
                 if video_rep and audio_rep:
+                    logger.info(f"📦 Representación de video y audio encontrada")
                     self._download_segments(video_rep.segments, folder_video)
                     self._download_segments(audio_rep.segments, folder_audio)
-
+                else:
+                    logger.info(
+                        f"❌ No se encontraron representaciones de video o audio. "
+                    )
                 if self.is_program_airing_finished(time_capture, schedule):
+
                     break
 
                 sleep(2)
+                logger.info("=" * 50)
             except requests.exceptions.ConnectionError as e:
                 logger.error(f"❌ Error de red: {e}")
                 sleep(1)
@@ -188,6 +256,7 @@ class DituStream:
                 logger.error(f"❌ Error inesperado: {e}")
                 sleep(1)
 
+        logger.info("Captura finalizada. Combinando y fusionando segmentos...")
         self.cleanup_audio_segments_without_video(result)
         return result
 
@@ -211,16 +280,25 @@ class DituStream:
             bool: True si la emisión del programa ha terminado, False en caso contrario.
         """
         if time_capture <= schedule.end_time:
-            logger.debug(
-                f"[{schedule.channel_id}] Captura aún dentro del horario. "
-                f"time_capture={time_capture}, end_time={schedule.end_time_as_12hours}"
+            logger.info(
+                f"Captura aún en curso: time_capture={time_capture}, end_time={schedule.end_time}"
             )
             return False
 
+        logger.info(f"Obteniendo la emision actual del canal: {schedule.channel_id}")
         current = self.schedule.get_current_program_live(schedule.channel_id)
+        logger.info(
+            f"La emision actual del canal: {current.title} ({current.content_id})"
+        )
         is_same_program = schedule.content_id == current.content_id
         if is_same_program:
+            logger.info(
+                f"El programa capturado con id [{schedule.channel_id}] es el mismo que el en emision: {current.title} ({current.content_id})"
+            )
             return False
+        logger.info(
+            f"El programa capturado con id [{schedule.channel_id}] ha finalizado: {current.title} ({current.content_id})"
+        )
         return True
         # logger.debug(
         #     f"[{schedule.channel_id}] Comparando programación actual: "
@@ -383,6 +461,6 @@ class DituStream:
         ]
         subprocess.run(cmd, check=True)
 
-        # shutil.rmtree(str(folder))
+        shutil.rmtree(str(folder))
 
         logger.info(f"Archivo final: {output}")
