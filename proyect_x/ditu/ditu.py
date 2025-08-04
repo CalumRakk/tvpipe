@@ -189,6 +189,21 @@ class DituStream:
 
         return repres
 
+    def wait_change_content(self, url: str, fake_period: Period):
+        frep_video = fake_period.best_video_representation()
+        frep_audio = fake_period.best_audio_representation()
+        while True:
+            mpd = self.dash.fetch_mpd(url)
+            periods = self.dash.parse_periods(mpd)
+
+            video_rep = self._get_videorepresentation_from_periods(periods, frep_video)
+            audio_rep = self._get_audiorepresentation_from_periods(periods, frep_audio)
+            if not video_rep and not audio_rep:
+                logger.info(f"Se detecto cambio de contenido.")
+                return
+            logger.info("Esperando hasta cambio de contenido...")
+            sleep(5)
+
     def capture_schedule(self, schedule: SimpleSchedule, output_dir: Union[str, Path]):
         logger.info("=" * 60)
         logger.info(
@@ -209,6 +224,9 @@ class DituStream:
             "video_init_path": Optional[Path],
             "audio_init_path": Optional[Path],
         }
+        fake_period, periods = self.get_period_content(url)
+        self.wait_change_content(url, fake_period)
+
         period_content, periods = self.get_period_content(url)
         best_rep_video = period_content.best_video_representation()
         best_rep_audio = period_content.best_audio_representation()
@@ -266,8 +284,13 @@ class DituStream:
                     self._download_segments(audio_rep.segments, folder_audio)
                 else:
                     # comerciales
-                    logger.info("📺 Comerciales detectados, esperando...")
-                    sleep(1)
+                    current = self.schedule.get_current_program_live(
+                        schedule.channel_id
+                    )
+                    logger.info(
+                        f"📺 Comerciales detectados, actualizando programación: {current.content_id} - {current.title}"
+                    )
+                    sleep(3)
 
                 delta = (time_capture - schedule.start_time).total_seconds()
                 logger.debug(f"Diferencia start_time vs now: {delta:.2f}s")

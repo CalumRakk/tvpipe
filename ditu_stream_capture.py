@@ -11,9 +11,9 @@ from proyect_x.ditu.schemas.simple_schedule import SimpleSchedule
 from proyect_x.logging_config import setup_logging
 
 # Configuracion
-CHANNEL_NAME = "Club"
+CHANNEL_NAME = "Desafio"
 OUTPUT_DIR = "output/test"
-CHECK_INTERVAL = 10  # segundos
+CHECK_INTERVAL = 5  # segundos
 REFRESH_INTERVAL = 20 * 60  # segundos (10 minutos)
 TRIGGER_WINDOW = 5 * 60  # segundos (5 minutos antes del inicio)
 MAX_PROCESSES = 2
@@ -105,12 +105,17 @@ def run_supervisor():
                     continue
 
                 if schedule.has_started:
-                    c_schedule = ditu.schedule.get_current_program_live(channel_id)
-                    logger.info(
-                        f"Contenido emitido actualmente: {c_schedule.content_id}, {c_schedule.title}"
-                    )
+                    # c_schedule = ditu.schedule.get_current_program_live(channel_id)
+                    # while c_schedule.content_id == schedule.content_id:
+                    #     logger.info(
+                    #         f"⏳ Esperando que inicie la programación: {schedule.title} ({schedule.content_id})"
+                    #     )
+                    #     time.sleep(5)
+                    #     c_schedule = ditu.schedule.get_current_program_live(channel_id)
+
                     schedule_copy = copy.deepcopy(schedule)
-                    manager.start(capture_process, schedule_copy)
+                    # manager.start(capture_process, schedule_copy)
+                    capture_process(schedule_copy)
                     captured_ids.add(schedule.content_id)
                     break
         time.sleep(CHECK_INTERVAL)

@@ -100,12 +100,15 @@ class SimpleSchedule(BaseModel):
 
     @property
     def has_started(self) -> bool:
-        """True y solo True si el programa se considerá como "Iniciado".
+        """True y solo True si el programa se considerará como "Iniciado".
         Se considera como "Iniciado" si el programa está en emision o falta menos de un minuto para comenzar.
 
         Si el programa ha finalizado, no se considera "Iniciado".
         """
-        start = self.start_time - timedelta(minutes=1)
+        delta = datetime.now() - self.start_time
+        minutes = int(delta.total_seconds() / 60)
+
+        start = self.start_time - timedelta(minutes=13)
         has_finished_program = self.end_time <= datetime.now()
         is_on_air = (start <= datetime.now()) and (not has_finished_program)
-        return is_on_air
+        return is_on_air and (minutes <= 3)

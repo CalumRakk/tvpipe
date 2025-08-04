@@ -181,7 +181,7 @@ class Dash:
 
         segments: List[str] = []
         current_number = int(startNumber)
-        for index, S in enumerate(representation.findall(".//mpd:S", ns)):
+        for S in representation.findall(".//mpd:S", ns):
             repeat = int(S.get("r", 0))
             for _ in range(repeat + 1):
                 url = urljoin(
