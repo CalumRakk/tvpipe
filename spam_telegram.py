@@ -11,8 +11,11 @@ from proyect_x.uploader.settings import get_settings
 from proyect_x.utils import sleep_progress
 from spam_telegram_utils import (
     has_user_been_messaged,
+    has_user_been_peerfood,
     load_sent_user_ids,
+    load_sent_user_ids_peerfood,
     mark_user_as_messaged,
+    mark_user_as_peerfood,
 )
 
 
@@ -57,17 +60,20 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     LINK = "https://t.me/+Jthh698ZVqQ4OGIx"
     config = get_settings(env_path=Path(".env/.upload_episode.test.env"))
-    CHAT_ID = -1002208736960
+    CHAT_ID = -1001207188185
     client = get_client_started(config)
 
     sent_cache = load_sent_user_ids()
-
+    user_peerfood = load_sent_user_ids_peerfood()
     for usermember in client.get_chat_members(CHAT_ID):  # type: ignore
         user = usermember.user
         user_id = user.id
-        if has_user_been_messaged(user_id, sent_cache):
+        if has_user_been_messaged(user_id, sent_cache) or has_user_been_peerfood(
+            user_id, sent_cache
+        ):
             logger.info(f"Already messaged user {user_id}, skipping.")
-            sleep(1)
+            continue
+        elif "Deleted Account" in user.mention:
             continue
 
         logger.info(f"Sending message to user {user_id}...")
@@ -76,6 +82,8 @@ if __name__ == "__main__":
             msg = client.send_message(user_id, message_text)
         except PeerFlood:
             logger.info(f"PeerFlood for user {user_id},{user.first_name}, skipping.")
+            sleep(random.randint(1, 3))
+            mark_user_as_peerfood(user_id, sent_cache)
             continue
 
         mark_user_as_messaged(user_id, sent_cache)
