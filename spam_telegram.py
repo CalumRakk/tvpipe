@@ -65,11 +65,13 @@ if __name__ == "__main__":
 
     sent_cache = load_sent_user_ids()
     user_peerfood = load_sent_user_ids_peerfood()
-    for usermember in client.get_chat_members(CHAT_ID):  # type: ignore
+    count_members = client.get_chat_members_count(CHAT_ID)
+    for index, usermember in enumerate(client.get_chat_members(CHAT_ID), 1):  # type: ignore
+        logger.info(f"Procesando miembro {index}/{count_members}")
         user = usermember.user
         user_id = user.id
         if has_user_been_messaged(user_id, sent_cache) or has_user_been_peerfood(
-            user_id, sent_cache
+            user_id, user_peerfood
         ):
             logger.info(f"Already messaged user {user_id}, skipping.")
             continue
@@ -83,7 +85,7 @@ if __name__ == "__main__":
         except PeerFlood:
             logger.info(f"PeerFlood for user {user_id},{user.first_name}, skipping.")
             sleep(random.randint(1, 3))
-            mark_user_as_peerfood(user_id, sent_cache)
+            mark_user_as_peerfood(user_id, user_peerfood)
             continue
 
         mark_user_as_messaged(user_id, sent_cache)
