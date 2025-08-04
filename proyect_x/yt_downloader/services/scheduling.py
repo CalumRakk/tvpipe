@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 register = RegistryManager()
 
 
-def should_skip_today():
+def should_skip_weekends():
     """Determina si se debe omitir la descarga del capítulo hoy."""
     today = datetime.now()
     if today.weekday() >= 5:
@@ -92,7 +92,7 @@ def get_episode_url(config) -> str:
     url = None
     while url is None:
         try:
-            if should_skip_today():
+            if should_skip_weekends() and config.skip_weekends:
                 wait_end_of_day()
                 continue
             if wait_until_release(config) and config.mode is RELEASE_MODE.AUTO:
@@ -101,17 +101,20 @@ def get_episode_url(config) -> str:
                 wait_release(config)
                 continue
 
-            url = get_episode_of_the_day()
+            url = get_episode_of_the_day() if config.url is None else config.url
             if url is None:
                 sleep_progress(120)
                 continue
-            elif was_episode_published(url):
+            elif config.check_episode_publication and was_episode_published(url):
                 logger.info(
                     "El capítulo de hoy ya fue descargado. Esperando al siguiente."
                 )
                 wait_end_of_day()
                 url = None
                 continue
+
+            if config.url:
+                break
 
         except ScheduleNotFound as e:
             logger.error(f"Error al obtener la programación: {e}")

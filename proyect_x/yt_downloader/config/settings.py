@@ -2,7 +2,7 @@ import os
 from datetime import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any, Literal, get_args
+from typing import Annotated, Any, Literal, Optional, get_args
 
 from pydantic import (
     Field,
@@ -28,6 +28,8 @@ class AppSettings(BaseSettings):
     download_folder: Path = Field(default=Path("output/"))
     skip_weekends: bool = Field(default=True)
     output_as_mp4: bool = Field(default=True)
+    url: Optional[str] = Field(default=None)
+    check_episode_publication: bool = Field(default=True)
 
     # Horarios para modo manual
     release_hour: time = Field(default=time(21, 30))
