@@ -16,10 +16,8 @@ from proyect_x.utils import normalize_windows_name, sleep_progress
 CHANNEL_NAME = "Desafio"
 OUTPUT_DIR = "output/test"
 CHECK_INTERVAL = 5  # segundos
-REFRESH_INTERVAL = 20 * 60  # segundos (10 minutos)
-TRIGGER_WINDOW = 5 * 60  # segundos (5 minutos antes del inicio)
 MAX_PROCESSES = 2
-CAPTURE_TIME_RANGES = ["01:28 pm - 01:31 pm", "1:46 pm - 1:50 pm"]
+CAPTURE_TIME_RANGES = ["2:20 pm - 4:20 pm"]
 
 
 class ProcessManager:

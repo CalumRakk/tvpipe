@@ -634,7 +634,7 @@ class DituStream:
                     logger.info("📴 Programa finalizado")
                     break
 
-                sleep(2)
+                sleep(5)
                 ciclo += 1
                 logger.info(f"finaliza a las {str(end)}")
                 logger.info("=" * 50)
