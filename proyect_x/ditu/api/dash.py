@@ -290,7 +290,9 @@ class Dash:
             period_id = period_element.attrib["id"]
             start = period_element.attrib["start"]
 
-            baseurl = period_element.find("./mpd:BaseURL", ns)
+            baseurl = period_element.find("./mpd:BaseURL", ns) or root.find(
+                "./mpd:BaseURL", ns
+            )
             assert baseurl is not None
             base_url = cast(str, baseurl.text)
 

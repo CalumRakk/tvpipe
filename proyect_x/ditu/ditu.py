@@ -12,7 +12,9 @@ import requests
 from unidecode import unidecode
 
 from proyect_x.ditu.api.dash import Dash, Period, Representation
+from proyect_x.ditu.schemas.common import ChannelInfo
 from proyect_x.ditu.schemas.simple_schedule import CurrentSchedule, SimpleSchedule
+from proyect_x.utils import normalize_windows_name
 
 from .api.channel import DituChannel
 from .api.schedule import DituSchedule
@@ -51,6 +53,33 @@ class DituStream:
         folder_name = f"{title_slug}.capitulo.{schedule.episode_number}.ditu.live.{width}p.{start}.content_id={schedule.content_id}"
         logger.info(f"📂 Carpeta de salida construida: {folder_name}")
         return base_output / folder_name
+
+    def _build_output_path_2(
+        self,
+        channelinfo: ChannelInfo,
+        range,
+        video_repre: Representation,
+        base_output: Path,
+    ):
+        logger = logging.getLogger(__name__)
+
+        start, end = range
+        channel_name = channelinfo["channelName"]
+
+        title_slug = unidecode(channel_name.strip()).lower().replace(" ", ".")
+        today = datetime.now().date()
+        start_str = start.strftime("%I:%M%p")
+        end_str = end.strftime("%I:%M%p")
+
+        width = video_repre.height
+
+        folder_name = (
+            f"{title_slug}.capture.{today}.{start_str}-{end_str}.ditu.live.{width}p"
+        )
+
+        folder_name_normal = normalize_windows_name(folder_name)
+        logger.info(f"📂 Carpeta de salida construida: {folder_name}")
+        return base_output / folder_name_normal
 
     def _download_url_initial(self, url: str, base_output: Path) -> Path:
         logger.info(f"➤ Descargando archivo INIT: {url}")
@@ -516,3 +545,108 @@ class DituStream:
         shutil.rmtree(str(folder))
 
         logger.info(f"Archivo final: {output}")
+
+    def capture_schedule_range(
+        self,
+        channel: ChannelInfo,
+        range: Tuple[datetime, datetime],
+        output_dir: Union[str, Path],
+    ):
+        logger.info("=" * 60)
+        start, end = range
+        logger.info(
+            f"🟢 INICIO CAPTURA, Captura inicia a: {start.isoformat()} y termina a: {end.isoformat()} (Tiempo actual: {datetime.now().isoformat()})",
+        )
+        output_dir = Path(output_dir) if isinstance(output_dir, str) else output_dir
+        channel_id = channel["channelId"]
+
+        url = self.dash.get_live_channel_manifest(channel_id)
+        result = {
+            "video_representation_id": None,
+            "audio_representation_id": None,
+            "folder_video": None,
+            "folder_audio": None,
+            "video_init_path": Optional[Path],
+            "audio_init_path": Optional[Path],
+        }
+        period_content, periods = self.get_period_content(url)
+        best_rep_video = period_content.best_video_representation()
+        best_rep_audio = period_content.best_audio_representation()
+        output = self._build_output_path_2(channel, range, best_rep_video, output_dir)
+
+        # ------------
+        result["video_init_path"] = self._download_url_initial(
+            best_rep_video.url_initial, output
+        )
+        result["audio_init_path"] = self._download_url_initial(
+            best_rep_audio.url_initial, output
+        )
+        folder_video = output / "video"
+        folder_audio = output / "audio"
+        result["folder_video"] = folder_video
+        result["folder_audio"] = folder_audio
+        result["video_representation_id"] = best_rep_video.id
+        result["audio_representation_id"] = best_rep_audio.id
+        # ------------
+
+        logger.info(f"Datos descargados INIT video/audio: {result}")
+        logger.info("-" * 60)
+        logger.info("⬇️  Comenzando descarga de segmentos en vivo...")
+
+        video_reps = self._get_videorepresentations_from_periods(
+            periods, best_rep_video
+        )
+        audio_reps = self._get_audiorepresentations_from_periods(
+            periods, best_rep_audio
+        )
+        for video_rep in video_reps:
+            for audio_rep in audio_reps:
+                self._download_segments(video_rep.segments, folder_video)
+                self._download_segments(audio_rep.segments, folder_audio)
+
+        ciclo = 0
+        while True:
+            try:
+                logger.info(f"🔄 Ciclo de captura: {ciclo}")
+
+                mpd = self.dash.fetch_mpd(url)
+
+                logger.info(f"Extrayendo periods del MPD (ciclo {ciclo})")
+                periods = self.dash.parse_periods(mpd)
+
+                logger.info("Buscando representación de video y audio...")
+                video_rep = self._get_videorepresentation_from_periods(
+                    periods, best_rep_video
+                )
+                audio_rep = self._get_audiorepresentation_from_periods(
+                    periods, best_rep_audio
+                )
+                if video_rep and audio_rep:
+                    logger.info(f"📦 Representación de video y audio encontrada")
+                    self._download_segments(video_rep.segments, folder_video)
+                    self._download_segments(audio_rep.segments, folder_audio)
+                else:
+                    # comerciales
+                    logger.info(f"📺 Comerciales detectados")
+                    sleep(3)
+
+                if datetime.now() > end:
+                    logger.info("📴 Programa finalizado")
+                    break
+
+                sleep(2)
+                ciclo += 1
+                logger.info(f"finaliza a las {str(end)}")
+                logger.info("=" * 50)
+            except requests.exceptions.ConnectionError as e:
+                logger.error(f"❌ Error de red: {e}")
+                sleep(1)
+            except Exception as e:
+                logger.error(f"❌ Error inesperado: {e}")
+                sleep(1)
+
+        logger.info("🟡 Captura terminada. Iniciando limpieza y combinación...")
+        self.cleanup_audio_segments_without_video(result)
+        logger.info("🧹 Limpieza realizada.")
+        logger.info("=" * 60)
+        return result
