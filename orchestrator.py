@@ -15,7 +15,7 @@ if __name__ == "__main__":
     config_yt = get_yt_settings(env_path=Path(".env/.download_video.env"))
     config_upload = get_upload_settings(env_path=Path(".env/.upload_episode.env"))
 
-    watermark_text = "Visita https://t.me/eldesafio4"
+    watermark_text = "https://t.me/DESAFIO_SIGLO_XXI"
     register = RegistryManager()
     for episode_dled in main_loop(config_yt):
         videos = episode_dled["videos"]

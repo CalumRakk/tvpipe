@@ -21,7 +21,7 @@ class Settings(BaseSettings):
         return end_time
 
     class Config:
-        env_file = ".env"  # o usa os.getenv("ENV_FILE", ".env") para más dinamismo
+        env_file = ".env"
 
 
 config = Settings()

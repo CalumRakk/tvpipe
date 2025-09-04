@@ -53,7 +53,7 @@ def resolve_quality_alias(alias: str, formats: list[dict]) -> int | None:
     if not formats or alias not in get_args(QualityAlias):
         return None
 
-    candicates = [i for i in formats if i.get("vbr")]
+    candicates = [i for i in formats if get_format_type(i) == "video"]
     sorted_candidates = sorted(candicates, key=lambda q: q["height"])
 
     match alias.lower():

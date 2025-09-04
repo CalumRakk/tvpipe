@@ -3,6 +3,7 @@ import random
 from pathlib import Path
 from time import sleep
 
+from pyrogram import enums
 from pyrogram.errors.exceptions import PeerFlood
 
 from proyect_x.logging_config import setup_logging
@@ -60,13 +61,14 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     LINK = "https://t.me/+Jthh698ZVqQ4OGIx"
     config = get_settings(env_path=Path(".env/.upload_episode.test.env"))
-    CHAT_ID = -1001207188185
+    CHAT_ID = -1002208736960
     client = get_client_started(config)
 
     sent_cache = load_sent_user_ids()
     user_peerfood = load_sent_user_ids_peerfood()
     count_members = client.get_chat_members_count(CHAT_ID)
-    for index, usermember in enumerate(client.get_chat_members(CHAT_ID), 1):  # type: ignore
+    for index, usermember in enumerate(client.get_chat_members(CHAT_ID, limit=count_members, filter=enums.ChatMembersFilter.SEARCH, query="A"), 1):  # type: ignore
+        logger.info("=" * 60)
         logger.info(f"Procesando miembro {index}/{count_members}")
         user = usermember.user
         user_id = user.id
@@ -82,7 +84,7 @@ if __name__ == "__main__":
         message_text = generar_mensaje(user.first_name, LINK)
         try:
             msg = client.send_message(user_id, message_text)
-        except PeerFlood:
+        except PeerFlood as e:
             logger.info(f"PeerFlood for user {user_id},{user.first_name}, skipping.")
             sleep(random.randint(1, 3))
             mark_user_as_peerfood(user_id, user_peerfood)

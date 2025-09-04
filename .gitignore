@@ -36,3 +36,5 @@ digest.txt
 !proyect_x/ditu
 !tests/fixtures/*
 test2.py
+.venv-1
+*.tmp
