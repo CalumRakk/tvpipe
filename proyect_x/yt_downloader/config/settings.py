@@ -28,7 +28,10 @@ class AppSettings(BaseSettings):
     download_folder: Path = Field(default=Path("output/"))
     skip_weekends: bool = Field(default=True)
     output_as_mp4: bool = Field(default=True)
-    url: Optional[str] = Field(default=None)
+    url: Optional[str] = Field(
+        default=None,
+        description="Especificar URL del capitulo, es usar el programa en modo manual. Ignora el filtro de fin se semana y hora de publicacion y obtencion de url.",
+    )
     check_episode_publication: bool = Field(default=True)
 
     # Horarios para modo manual

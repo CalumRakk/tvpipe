@@ -92,10 +92,15 @@ def get_episode_url(config) -> str:
     url = None
     while url is None:
         try:
-            if should_skip_weekends() and config.skip_weekends:
+            if not config.url and should_skip_weekends():
                 wait_end_of_day()
                 continue
-            if wait_until_release(config) and config.mode is RELEASE_MODE.AUTO:
+            if (
+                not config.url
+                and wait_until_release(config)
+                and config.mode is RELEASE_MODE.AUTO
+            ):
+                # TODO creo que se puede eliminar la opcion RELEASE_MODE. Esta opcion podria funcionar con solo especificar la hora de lanzamiento sino se especifica es porque se usa el modo auto
                 # Si mode está en auto, al finalizar la espera del lanzamiento,
                 # se vuelve a obtener la hora de lanzamiento para casos donde la programación pueda cambiar.
                 wait_release(config)
