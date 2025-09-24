@@ -69,6 +69,7 @@ def download_media_item(job: DownloadJob, download_folder: Path) -> dict:
         "merge_output_format": None,
         "postprocessors": [],
         "allow_unplayable_formats": True,
+        "cookiefile": r"F:\user\Downloads\www.youtube.com_cookies.txt",
     }
 
     try:

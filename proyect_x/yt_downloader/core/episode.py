@@ -38,6 +38,7 @@ def get_episode_of_the_day() -> Optional[str]:
         "playlistend": 5,
         "quiet": True,
         "no_warnings": True,
+        "cookiefile": r"F:\user\Downloads\www.youtube.com_cookies.txt",
     }
     import yt_dlp  # import aquí para evitar dependencia circular si usas `yt_dlp` en múltiples módulos
 

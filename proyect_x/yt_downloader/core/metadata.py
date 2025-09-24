@@ -50,7 +50,10 @@ def get_metadata(url: str) -> dict:
         if now - timestamp < timedelta(hours=24):
             return entry["info"]
 
-    ydl_opts = {"quiet": True}
+    ydl_opts = {
+        "quiet": True,
+        "cookiefile": r"F:\user\Downloads\www.youtube.com_cookies.txt",
+    }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = cast(dict, ydl.extract_info(url, download=False))
 

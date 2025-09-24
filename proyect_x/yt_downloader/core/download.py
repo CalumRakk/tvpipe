@@ -29,7 +29,12 @@ def download_audio(config) -> str:
     url = config["URL"]
     download_folder = config["download_folder"] / "TEMP"
     output = f"{download_folder}/channel_id=%(channel_id)s&video_id=%(id)s&format_id=%(format_id)s.%(ext)s"
-    ydl_opts_audio = {"format": "bestaudio", "outtmpl": output, "continue_dl": True}
+    ydl_opts_audio = {
+        "format": "bestaudio",
+        "outtmpl": output,
+        "continue_dl": True,
+        "cookiefile": r"F:\user\Downloads\www.youtube.com_cookies.txt",
+    }
 
     with yt_dlp.YoutubeDL(ydl_opts_audio) as ydl:
         logger.info("Descargando audio...")
