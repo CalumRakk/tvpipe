@@ -1,4 +1,6 @@
 import logging
+import os
+from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Union, cast
 
@@ -6,6 +8,25 @@ import cv2
 from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
+
+
+def load_bundled_font(font_size: int) -> ImageFont.FreeTypeFont:
+    """
+    Carga la fuente desde los recursos del paquete de forma segura.
+    Funciona tanto en desarrollo local como instalado vía pip.
+    """
+    try:
+        base_dir = Path(os.getcwd()).name
+        font_resource = files(f"{base_dir}.assets.fonts").joinpath(
+            "Roboto-VariableFont_wdth,wght.ttf"
+        )
+        # as_file garantiza que obtengamos una ruta de archivo válida
+        with as_file(font_resource) as font_path:
+            logger.debug(f"Cargando fuente desde recurso: {font_path}")
+            return ImageFont.truetype(str(font_path), font_size)
+    except (ImportError, FileNotFoundError) as e:
+        logger.warning(f"No se pudo cargar la fuente del paquete: {e}. Usando default.")
+        return cast(ImageFont.FreeTypeFont, ImageFont.load_default())
 
 
 def resize_image(
@@ -128,24 +149,16 @@ def add_watermark(
 
 
 def main(video_path: str, output_image: str, watermark_text: str) -> None:
-
-    font_path = (
-        r"D:\github Leo\caracoltv-dl\fonts\Roboto\Roboto-VariableFont_wdth,wght.ttf"
-    )
     font_size = 48
-
-    font = load_font(font_path, font_size)
+    font = load_bundled_font(font_size)
     frame_image = extract_first_frame(video_path, output_image)
     add_watermark(frame_image, watermark_text, font, output_image)
 
 
 def add_watermark_to_image(image_path: str, watermark_text: str, output_image: str):
     """Agrega una marca de agua a una imagen existente."""
-    font_path = (
-        r"D:\github Leo\caracoltv-dl\fonts\Roboto\Roboto-VariableFont_wdth,wght.ttf"
-    )
     font_size = 60
-    font = load_font(font_path, font_size)
+    font = load_bundled_font(font_size)
     add_watermark(image_path, watermark_text, font, output_image)
 
 
