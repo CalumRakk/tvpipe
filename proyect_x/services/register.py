@@ -140,3 +140,19 @@ class RegistryManager:
         raise ValueError(
             f"No se encontró el registro de carga para el video: {video_path}"
         )
+
+    def remove_video_entry(self, video_path: Union[str, Path]) -> None:
+        """Elimina las entradas de un video específico para limpiar caché inválido."""
+        video_path = Path(video_path).resolve()
+
+        inodo = self._get_inodo(video_path)
+        data = self._load()
+        new_data = [
+            d
+            for d in data
+            if not (d.get("inodo") == inodo and d.get("event") == "upload")
+        ]
+
+        if len(new_data) < len(data):
+            self._save(new_data)
+            print(f"Entrada inválida eliminada del registro para: {video_path.name}")

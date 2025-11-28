@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, time, timedelta
 
 from proyect_x.caracoltv import CaracolTV
-from proyect_x.shared.download_register import RegistryManager
+from proyect_x.services.register import RegistryManager
 from proyect_x.yt_downloader.core.common import sleep_progress
 from proyect_x.yt_downloader.core.episode import (
     get_episode_number,

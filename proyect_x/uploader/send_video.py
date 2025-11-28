@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from pyrogram import Client  # type: ignore
 from pyrogram.types import Chat, InputMediaVideo, Message
 
-from proyect_x.shared.download_register import RegistryManager
+from proyect_x.services.register import RegistryManager
 from proyect_x.uploader.settings import AppSettings
 from proyect_x.uploader.utils import get_video_metadata
 
@@ -74,28 +74,24 @@ class TelegramUploader:
         video_path = Path(video.path)
 
         if self.register.was_video_uploaded(video_path):
-            self.logger.info(
-                f"El video {video_path.name} ya fue registrado. Verificando si ya fue enviado."
-            )
-            data = self.register.get_video_uploaded(video_path)
             try:
-                message = cast(
-                    Message, client.get_messages(data["chat_id"], data["message_id"])
-                )
-                if not message.empty:
+                self.logger.info(f"Verificando video registrado: {video_path.name}")
+                data = self.register.get_video_uploaded(video_path)
+                chat_id = data["chat_id"]
+                message_id = data["message_id"]
+                message = cast(Message, client.get_messages(chat_id, message_id))
+                if message and not message.empty and message.video:
                     self.logger.info(f"Video reutilizado (ID {message.id}).")
                     return message
-            except Exception:
-                pass  # Si falla al obtener mensaje, lo reenviamos
+            except Exception as e:
+                self.logger.warning(f"No se pudo recuperar el mensaje del caché: {e}")
 
-            self.logger.info(
-                f"El video {video_path.name} no se encuentra o no es accesible. Se reenviará."
-            )
+            self.logger.info(f"Entrada de caché inválida. Limpiando y reenviando.")
+            self.register.remove_video_entry(video_path)
 
         self.logger.info(
             f"Enviando video {index}/{total}: {video_path.name} ({video.size_mb:.2f} MB)"
         )
-
         try:
             message = cast(
                 Message,

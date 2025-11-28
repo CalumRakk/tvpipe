@@ -1,6 +1,11 @@
+import hashlib
 import logging
 import re
+from pathlib import Path
 from time import sleep
+
+import filetype
+from git import Union
 
 logger = logging.getLogger(__name__)
 
@@ -30,3 +35,24 @@ def sleep_progress(seconds: float):
             logger.info(f"Faltan {mins_left} minutos...")
         elif i <= 10:  # Mostrar segundos finales
             logger.info(f"{i} segundos restantes...")
+
+
+def create_md5sum_by_hashlib(path: Union[str, Path]) -> str:
+    path = Path(path) if isinstance(path, str) else path
+    hash_md5 = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(50 * 1024 * 1024), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
+
+
+def get_mimetype(path: Path):
+    path = Path(path) if isinstance(path, str) else path
+    logger.debug(f"Obteniendo el mimetype para {path=}")
+    for _ in range(3):
+        kind = filetype.guess(str(path))
+        logger.debug(f"El mimetype para {path=} es {kind=}")
+        if kind is None:
+            sleep(1)
+            continue
+        return kind.mime

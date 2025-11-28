@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List
 
 from proyect_x.create_thumbnail_with_watermaker import add_watermark_to_image
-from proyect_x.shared.download_register import RegistryManager
+from proyect_x.services.register import RegistryManager
 from proyect_x.uploader.send_video import TelegramUploader
 from proyect_x.yt_downloader.schemas import EpisodeDownloadResult
 

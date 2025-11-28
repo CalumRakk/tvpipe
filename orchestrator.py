@@ -2,7 +2,7 @@ from pathlib import Path
 
 from proyect_x.logging_config import setup_logging
 from proyect_x.services.publisher import EpisodePublisher
-from proyect_x.shared.download_register import RegistryManager
+from proyect_x.services.register import RegistryManager
 from proyect_x.uploader.send_video import TelegramUploader
 from proyect_x.uploader.settings import get_settings as get_upload_settings
 from proyect_x.yt_downloader.config.settings import get_settings as get_yt_settings
