@@ -5,7 +5,6 @@ from typing import cast
 
 import requests
 
-from proyect_x.shared.download_register import RegistryManager
 from proyect_x.yt_downloader.core.download import merge_with_ffmpeg
 from proyect_x.yt_downloader.core.episode import get_episode_number
 from proyect_x.yt_downloader.core.formats import extract_files_from_download_result
@@ -13,6 +12,7 @@ from proyect_x.yt_downloader.core.metadata import get_metadata
 from proyect_x.yt_downloader.schemas import (
     DownloadJob,
     DownloadJobResult,
+    EpisodeDownloadResult,
     YtDlpResponse,
 )
 
@@ -74,9 +74,9 @@ def download_thumbnail(url: str, config) -> Path:
     return output
 
 
-def postprocess_and_register(
+def postprocess_downloads(
     url: str, downloads: list[DownloadJobResult], config
-) -> dict:
+) -> EpisodeDownloadResult:
     finales = []
 
     serie_name_final = config.serie_slug
@@ -97,17 +97,10 @@ def postprocess_and_register(
 
         if not output.exists():
             merge_with_ffmpeg(video_path, audio_path, str(output))
-            register = RegistryManager()
-            register.register_episode_downloaded(
-                episode=number,
-                file_path=output,
-            )
 
         finales.append(output)
 
     thumbnail_path = download_thumbnail(url, config)
-    return {
-        "videos": finales,
-        "thumbnail": thumbnail_path,
-        "episode_number": number,
-    }
+    return EpisodeDownloadResult(
+        episode_number=number, video_paths=finales, thumbnail_path=thumbnail_path
+    )

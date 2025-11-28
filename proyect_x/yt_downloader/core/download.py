@@ -17,7 +17,6 @@ import math
 import os
 import subprocess
 from pathlib import Path
-from time import sleep
 from typing import Union, cast
 
 import yt_dlp
@@ -33,7 +32,7 @@ def download_audio(config) -> str:
         "format": "bestaudio",
         "outtmpl": output,
         "continue_dl": True,
-        "cookiefile": r"C:\Users\Leo\Downloads\www.youtube.com_cookies.txt",
+        # "cookiefile": r"C:\Users\Leo\Downloads\www.youtube.com_cookies.txt",
     }
 
     with yt_dlp.YoutubeDL(ydl_opts_audio) as ydl:

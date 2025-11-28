@@ -13,15 +13,11 @@ Ideal para incluir funciones relacionadas con:
 Este módulo ayuda a automatizar la lógica de lanzamientos periódicos.
 """
 
-import json
 import logging
 import re
-from datetime import datetime, time
-from pathlib import Path
+from datetime import datetime
 from typing import Optional, cast
 
-from proyect_x.yt_downloader.core.common import sleep_progress
-from proyect_x.yt_downloader.schemas import RELEASE_MODE
 
 from .metadata import get_metadata
 
@@ -38,7 +34,7 @@ def get_episode_of_the_day() -> Optional[str]:
         "playlistend": 5,
         "quiet": True,
         "no_warnings": True,
-        "cookiefile": r"C:\Users\Leo\Downloads\www.youtube.com_cookies.txt",
+        # "cookiefile": r"C:\Users\Leo\Downloads\www.youtube.com_cookies.txt",
     }
     import yt_dlp  # import aquí para evitar dependencia circular si usas `yt_dlp` en múltiples módulos
 

@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+from pathlib import Path
 
 
 def logger_formatter() -> logging.Formatter:
@@ -19,6 +20,7 @@ def handler_stream(formatter: logging.Formatter) -> logging.StreamHandler:
 
 
 def handler_file(path: str, formatter: logging.Formatter) -> logging.FileHandler:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     file_handler = logging.FileHandler(path, encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)

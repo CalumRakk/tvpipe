@@ -1,6 +1,6 @@
 import enum
 from pathlib import Path
-from typing import List, Literal, Optional, Sequence, TypedDict, Union
+from typing import List, Literal, Optional, TypedDict, Union
 
 from pydantic import BaseModel
 from typing_extensions import NotRequired
@@ -32,6 +32,12 @@ YOUTUBE_AUDIO_CODECS = {
     "vorbis",  # Vorbis (raro, usado en algunos videos viejos o bajos)
     "mp3",  # MP3 (extremadamente raro, pero técnicamente posible)
 }
+
+
+class EpisodeDownloadResult(BaseModel):
+    episode_number: str
+    video_paths: List[Path]
+    thumbnail_path: Path
 
 
 class DownloadJob(TypedDict):

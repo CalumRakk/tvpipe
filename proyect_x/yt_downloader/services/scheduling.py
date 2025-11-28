@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime, time, timedelta
-from typing import Optional, cast
 
 from proyect_x.caracoltv import CaracolTV
 from proyect_x.shared.download_register import RegistryManager
@@ -33,7 +32,7 @@ def was_episode_published(url: str) -> bool:
     number = get_episode_number(title)
 
     if register.was_episode_published(number):
-        logger.info("✅ El capítulo de hoy ya fue descargado.")
+        logger.info("El capítulo de hoy ya fue descargado.")
         return True
     return False
 
