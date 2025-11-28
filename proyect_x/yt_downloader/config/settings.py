@@ -1,19 +1,17 @@
-import os
 from datetime import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any, Literal, Optional, get_args
+from typing import Optional
 
 from pydantic import (
     Field,
     ValidationError,
     computed_field,
     field_validator,
-    model_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from proyect_x.yt_downloader.schemas import QUALITY, RELEASE_MODE
+from proyect_x.yt_downloader.schemas import RELEASE_MODE
 
 
 class AppSettings(BaseSettings):
@@ -33,6 +31,7 @@ class AppSettings(BaseSettings):
         description="Especificar URL del capitulo, es usar el programa en modo manual. Ignora el filtro de fin se semana y hora de publicacion y obtencion de url.",
     )
     check_episode_publication: bool = Field(default=True)
+    youtube_cookies_path: Optional[Path] = None
 
     # Horarios para modo manual
     release_hour: time = Field(default=time(21, 30))

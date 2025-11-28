@@ -52,7 +52,7 @@ def get_metadata(url: str) -> dict:
 
     ydl_opts = {
         "quiet": True,
-        "cookiefile": r"F:\user\Downloads\www.youtube.com_cookies.txt",
+        "cookiefile": r"C:\Users\Leo\Downloads\www.youtube.com_cookies.txt",
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = cast(dict, ydl.extract_info(url, download=False))
