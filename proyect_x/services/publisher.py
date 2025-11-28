@@ -4,16 +4,15 @@ from typing import List
 
 from proyect_x.create_thumbnail_with_watermaker import add_watermark_to_image
 from proyect_x.shared.download_register import RegistryManager
-from proyect_x.uploader import send_video
-from proyect_x.uploader.settings import AppSettings as UploadSettings
+from proyect_x.uploader.send_video import TelegramUploader
 from proyect_x.yt_downloader.schemas import EpisodeDownloadResult
 
 logger = logging.getLogger(__name__)
 
 
 class EpisodePublisher:
-    def __init__(self, config: UploadSettings, registry: RegistryManager):
-        self.config = config
+    def __init__(self, uploader: TelegramUploader, registry: RegistryManager):
+        self.uploader = uploader
         self.registry = registry
         self.watermark_text = "https://t.me/DESAFIO_SIGLO_XXI"
 
@@ -38,11 +37,8 @@ class EpisodePublisher:
                 str(thumbnail_path), self.watermark_text, watermarked_thumb
             )
 
-            # 3. Subir Video(s)
-            video_paths_str = [str(file) for file in videos]
-            send_video.send_videos_as_media_group(
-                video_paths_str, watermarked_thumb, episode_number, self.config
-            )
+            # 3. Subir Video(s) usando la instancia del uploader
+            self.uploader.send_media_group(videos, watermarked_thumb, episode_number)
 
             # 4. Registrar Publicación
             self.registry.register_episode_publication(episode_number)
