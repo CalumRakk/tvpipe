@@ -27,10 +27,10 @@ class Video(BaseModel):
 
 
 class TelegramUploader:
-    def __init__(self, config: AppSettings):
+    def __init__(self, config: AppSettings, registry: RegistryManager):
         self.config = config
         self.logger = logging.getLogger(__name__)
-        self.register = RegistryManager()
+        self.register = registry
 
     def _progress(self, current, total, step=10):
         percentage = current * 100 / total
