@@ -1,12 +1,10 @@
 import logging
-import os
-from datetime import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any, List, Literal, Optional, Sequence, Union, get_args
+from typing import Union
 
-from pydantic import Field, ValidationError, computed_field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, ValidationError, field_validator
+from pydantic_settings import BaseSettings
 
 
 def is_digit(s: str) -> bool:
@@ -57,5 +55,5 @@ def get_settings(env_path: Union[Path, str]) -> AppSettings:
             return config
         raise FileNotFoundError(f"El archivo de configuración {env_path} no existe.")
     except ValidationError as e:
-        print("❌ Error en configuración:", e)
+        print("Error en configuración:", e)
         raise

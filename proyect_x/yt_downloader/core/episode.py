@@ -18,7 +18,6 @@ import re
 from datetime import datetime
 from typing import Optional, cast
 
-
 from .metadata import get_metadata
 
 logger = logging.getLogger(__name__)
@@ -54,7 +53,7 @@ def get_episode_of_the_day() -> Optional[str]:
                     return url
             except Exception:
                 continue
-        logger.info(f"❌ No se encontró el episodio del dia.")
+        logger.info(f"No se encontró el episodio del dia.")
 
 
 def get_episode_number(string: str) -> str:

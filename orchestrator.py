@@ -1,7 +1,6 @@
 from pathlib import Path
 
-from scripts.create_thumbnail_with_watermaker import add_watermark_to_image
-
+from proyect_x.create_thumbnail_with_watermaker import add_watermark_to_image
 from proyect_x.logging_config import setup_logging
 from proyect_x.shared.download_register import RegistryManager
 from proyect_x.uploader import send_video

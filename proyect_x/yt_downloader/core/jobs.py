@@ -79,7 +79,7 @@ def download_media_item(job: DownloadJob, download_folder: Path) -> dict:
             logger.info(f"✔️ Descarga completada: {Path(filepath).name}")
             return info
     except DownloadError as e:
-        error_msg = f"❌ Error al descargar {url} con format {format_id}: {e}"
+        error_msg = f"Error al descargar {url} con format {format_id}: {e}"
         logger.error(error_msg)
         raise RuntimeError(error_msg)
     except Exception as e:

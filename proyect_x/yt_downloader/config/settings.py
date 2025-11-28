@@ -91,6 +91,6 @@ def get_settings(env_path: Path | None = None) -> AppSettings:
         try:
             return AppSettings(_env_file=env_path)  # type: ignore
         except ValidationError as e:
-            print("❌ Error en configuración:", e)
+            print("Error en configuración:", e)
             raise
     return AppSettings()
