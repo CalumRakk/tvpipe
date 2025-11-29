@@ -366,3 +366,46 @@ class TelegramService:
             logger.info(f"Caché de peers actualizado. Escaneados {count} diálogos.")
         except Exception as e:
             logger.warning(f"Error intentando refrescar peers: {e}")
+
+    def get_media_group(
+        self, chat_id: Union[int, str], message_id: int
+    ) -> List[Message]:
+        """Obtiene todos los mensajes que componen un álbum."""
+        if not self.client.is_connected:
+            self.start()
+        try:
+            return self.client.get_media_group(chat_id, message_id)  # type: ignore
+        except Exception as e:
+            logger.error(f"Error obteniendo media group {message_id}: {e}")
+            return []
+
+    def copy_media_group(
+        self,
+        target_chat_id: Union[int, str],
+        from_chat_id: Union[int, str],
+        message_id: int,
+    ) -> List[Message]:
+        """Copia un álbum entero manteniendo la agrupación."""
+        if not self.client.is_connected:
+            self.start()
+        try:
+            # copy_media_group devuelve la lista de mensajes generados en el destino
+            return self.client.copy_media_group(  # type: ignore
+                chat_id=target_chat_id, from_chat_id=from_chat_id, message_id=message_id
+            )
+        except Exception as e:
+            logger.error(f"Error copiando media group {message_id}: {e}")
+            return []
+
+    def delete_messages(
+        self, chat_id: Union[int, str], message_ids: Union[int, List[int]]
+    ) -> bool:
+        """Elimina uno o varios mensajes del chat especificado."""
+        if not self.client.is_connected:
+            self.start()
+        try:
+            self.client.delete_messages(chat_id, message_ids)  # type: ignore
+            return True
+        except Exception as e:
+            logger.error(f"Error eliminando mensajes en {chat_id}: {e}")
+            return False

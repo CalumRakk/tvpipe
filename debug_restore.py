@@ -5,6 +5,7 @@ from proyect_x.services.migrator import ContentMigrator
 from proyect_x.services.register import RegistryManager
 from proyect_x.services.telegram.client import TelegramService
 
+# Configuración
 config = get_config("config.env")
 registry = RegistryManager()
 tg_service = TelegramService(
@@ -14,6 +15,7 @@ tg_service = TelegramService(
     workdir=config.telegram.to_telegram_working,
 )
 migration = cast(MigrationConfig, config.migration)
-migration = ContentMigrator(migration, registry, tg_service)
-# tg_service.force_refresh_peers()
-migration.run_migration_batch()
+migration_service = ContentMigrator(migration, registry, tg_service)
+
+BATCH_ID = "20251129_090830"
+migration_service.restore_batch(BATCH_ID)

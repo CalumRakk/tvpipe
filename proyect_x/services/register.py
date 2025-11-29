@@ -22,6 +22,8 @@ class MigrationEntry(TypedDict):
     # Coordenadas Origen
     source_chat_id: int
     source_message_id: int
+    media_group_id: str
+    batch_id: str
 
     # Coordenadas Respaldo (El "Puntero")
     backup_chat_id: int
@@ -208,6 +210,8 @@ class RegistryManager:
         backup_msg_id: int,
         video_meta: VideoMeta,
         original_caption: Optional[str],
+        media_group_id: str,
+        batch_id: str,
     ) -> None:
         entry: MigrationEntry = {
             "migration_id": f"{source_chat_id}_{source_msg_id}",
@@ -219,6 +223,8 @@ class RegistryManager:
             "original_caption": original_caption,
             "timestamp": datetime.now().isoformat(),
             "status": "migrated",
+            "media_group_id": media_group_id,
+            "batch_id": batch_id,
         }
 
         data = self._load_migration()
@@ -226,6 +232,22 @@ class RegistryManager:
         data = [d for d in data if d["migration_id"] != entry["migration_id"]]
         data.append(entry)
         self._save_migration(data)
+
+    def get_entries_by_batch(self, batch_id: str) -> List[MigrationEntry]:
+        """Obtiene todos los items de una sesión de migración específica."""
+        data = self._load_migration()
+        return [d for d in data if d.get("batch_id") == batch_id]
+
+    def list_available_batches(self) -> dict:
+        """Devuelve un resumen de los lotes disponibles y cuántos items tienen."""
+        data = self._load_migration()
+        batches = {}
+        for d in data:
+            bid = d.get("batch_id", "unknown")
+            if bid not in batches:
+                batches[bid] = {"count": 0, "status": "mixed", "date": d["timestamp"]}
+            batches[bid]["count"] += 1
+        return batches
 
     def is_message_migrated(self, source_chat_id: int, message_id: int) -> bool:
         mid = f"{source_chat_id}_{message_id}"
@@ -241,3 +263,23 @@ class RegistryManager:
             if entry["migration_id"] == mid:
                 return entry
         return None
+
+    def update_migration_status(
+        self, source_chat_id: int, message_id: int, status: str
+    ):
+        """Actualiza el estado de una migración (ej. a 'restored')."""
+        mid = f"{source_chat_id}_{message_id}"
+        data = self._load_migration()
+        updated = False
+        for entry in data:
+            if entry["migration_id"] == mid:
+                entry["status"] = status  # type: ignore
+                updated = True
+                break
+        if updated:
+            self._save_migration(data)
+
+    def get_entries_by_media_group(self, media_group_id: str) -> List[MigrationEntry]:
+        """Obtiene todas las partes de un álbum específico."""
+        data = self._load_migration()
+        return [d for d in data if d.get("media_group_id") == media_group_id]

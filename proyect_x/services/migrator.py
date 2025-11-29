@@ -1,5 +1,6 @@
 import logging
 import time
+from datetime import datetime
 
 from pyrogram.types import Message  # type: ignore
 
@@ -29,28 +30,45 @@ class ContentMigrator:
         )
 
     def run_migration_batch(self):
-        """Ejecuta un lote de migración."""
-        logger.info(f"Iniciando migración desde {self.config.source_chat_id}...")
+        logger.info(
+            f"Iniciando migración de ÁLBUMES desde {self.config.source_chat_id}..."
+        )
+        current_batch_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.tg.start()
 
+        # Cache para no procesar el mismo grupo varias veces
+        processed_media_groups = set()
         count = 0
+
         try:
             history = self.tg.get_history(
                 self.config.source_chat_id, limit=self.config.batch_size
             )
 
             for message in history:
-                if self._should_migrate(message):
-                    success = self._process_message(message)
-                    if success:
-                        count += 1
-                        # Pequeña pausa para evitar FloodWait
-                        time.sleep(2)
+                # 1. FILTRO: Solo procesar si es parte de un álbum
+                if not message.media_group_id:
+                    logger.debug(f"Mensaje {message.id} ignorado (no es álbum).")
+                    continue
 
-            logger.info(f"Lote finalizado. Mensajes migrados: {count}")
+                # 2. CACHÉ: Si ya procesamos este grupo, saltar
+                if message.media_group_id in processed_media_groups:
+                    continue
+
+                # 3. PROCESAR EL GRUPO ENTERO
+                success = self._process_album_batch(message, current_batch_id)
+
+                # Marcar grupo como procesado (éxito o fallo, para no reintentar en este loop)
+                processed_media_groups.add(message.media_group_id)
+
+                if success:
+                    count += 1
+                    time.sleep(3)
+
+            logger.info(f"Lote finalizado. Álbumes migrados: {count}")
 
         except Exception as e:
-            logger.error(f"Error durante el lote de migración: {e}", exc_info=True)
+            logger.error(f"Error en batch: {e}", exc_info=True)
         finally:
             self.tg.stop()
 
@@ -64,60 +82,6 @@ class ContentMigrator:
             return False
 
         return True
-
-    def _process_message(self, message: Message) -> bool:
-        msg_id = message.id
-        logger.info(f"Procesando mensaje {msg_id}...")
-
-        # A. Extraer Metadatos (Huella Digital)
-        vid = message.video
-        meta: VideoMeta = {
-            "file_unique_id": vid.file_unique_id,
-            "width": vid.width,
-            "height": vid.height,
-            "duration": vid.duration,
-            "file_name": vid.file_name,
-            "file_size": vid.file_size,
-        }
-
-        # B. Copiar a Respaldo (Backup)
-        backup_msg = self.tg.copy_message(
-            target_chat_id=self.config.backup_chat_id,
-            from_chat_id=message.chat.id,
-            message_id=msg_id,
-        )
-
-        if not backup_msg:
-            logger.error(f"Fallo al copiar mensaje {msg_id}. Abortando.")
-            return False
-
-        # C. Registrar puntero (CRÍTICO: Hacer esto antes de borrar/editar)
-        self.registry.register_migration(
-            source_chat_id=message.chat.id,
-            source_msg_id=msg_id,
-            backup_chat_id=backup_msg.chat.id,
-            backup_msg_id=backup_msg.id,
-            video_meta=meta,
-            original_caption=message.caption,
-        )
-
-        # D. Ofuscar (Reemplazar por imagen)
-        replaced = self.tg.replace_video_with_photo(
-            chat_id=message.chat.id,
-            message_id=msg_id,
-            photo_path=self.config.placeholder_image_path,
-            caption=self.obfuscation_caption,
-        )
-
-        if replaced:
-            logger.info(f"Mensaje {msg_id} migrado y ofuscado correctamente.")
-            return True
-        else:
-            logger.error(
-                f"Se copió el respaldo {backup_msg.id} pero falló la ofuscación de {msg_id}."
-            )
-            # TODO: decidir si borrar el respaldo
-            return False
 
     def restore_message(self, message_id: int):
         """Método para revertir manualmente un mensaje específico."""
@@ -142,3 +106,229 @@ class ContentMigrator:
         if success:
             logger.info(f"Mensaje {message_id} restaurado exitosamente.")
             # Actualizar estado en registro a "restored" (tarea pendiente en registry)
+
+    def _process_album_batch(self, trigger_message: Message, batch_id: str) -> bool:
+        """
+        Maneja la lógica de migrar un álbum completo.
+        trigger_message es cualquiera de los mensajes del grupo.
+        """
+        group_id = trigger_message.media_group_id
+        chat_id = trigger_message.chat.id
+        logger.info(
+            f"Procesando Media Group ID: {group_id} detectado en msg {trigger_message.id}"
+        )
+
+        # A. Obtener todas las partes ORIGINALES del álbum
+        # Pyrogram las devuelve ordenadas por ID
+        source_messages = self.tg.get_media_group(chat_id, trigger_message.id)
+        if not source_messages:
+            return False
+
+        # Verificar si ALGUNO de los mensajes ya fue migrado para evitar duplicados parciales
+        for msg in source_messages:
+            if self.registry.is_message_migrated(chat_id, msg.id):
+                logger.warning(
+                    f"El grupo {group_id} ya contiene partes migradas. Saltando."
+                )
+                return False
+
+        # B. Copiar todo el bloque al Respaldo
+        backup_messages = self.tg.copy_media_group(
+            target_chat_id=self.config.backup_chat_id,
+            from_chat_id=chat_id,
+            message_id=trigger_message.id,
+        )
+
+        if not backup_messages or len(backup_messages) != len(source_messages):
+            logger.error(
+                "Error crítico: La cantidad de mensajes copiados no coincide con los originales."
+            )
+            return False
+
+        # C. Emparejar (Zip) y Procesar Individualmente
+        # Asumimos que el orden se mantiene (Telegram suele garantizar esto por ID incremental)
+        # Ordenamos ambas listas por ID para asegurar correspondencia 1:1
+        source_messages.sort(key=lambda m: m.id)
+        backup_messages.sort(key=lambda m: m.id)
+
+        all_success = True
+
+        for i, (src_msg, bkp_msg) in enumerate(zip(source_messages, backup_messages)):
+            # LÓGICA DE CAPTION ÚNICO:
+            # Solo el primer elemento (índice 0) lleva el texto de aviso.
+
+            if i == 0:
+                caption_to_use = self.obfuscation_caption
+            else:
+                caption_to_use = ""
+
+            if src_msg.video:
+
+                step_success = self._register_and_obfuscate(
+                    src_msg, bkp_msg, batch_id, caption_override=caption_to_use
+                )
+
+                if not step_success:
+                    all_success = False
+            else:
+                pass
+
+        return all_success
+
+    def _register_and_obfuscate(
+        self, src_msg: Message, bkp_msg: Message, batch_id: str, caption_override: str
+    ) -> bool:
+        """
+        Lógica extraída para manejar el par Source <-> Backup individualmente.
+        Igual que antes, pero recibe los objetos ya listos.
+        """
+        try:
+            vid = src_msg.video
+            meta: VideoMeta = {
+                "file_unique_id": vid.file_unique_id,
+                "width": vid.width,
+                "height": vid.height,
+                "duration": vid.duration,
+                "file_name": vid.file_name,
+                "file_size": vid.file_size,
+            }
+
+            # 1. Registrar
+            self.registry.register_migration(
+                source_chat_id=src_msg.chat.id,
+                source_msg_id=src_msg.id,
+                backup_chat_id=bkp_msg.chat.id,
+                backup_msg_id=bkp_msg.id,
+                video_meta=meta,
+                original_caption=src_msg.caption,
+                media_group_id=src_msg.media_group_id,
+                batch_id=batch_id,
+            )
+
+            # 2. Ofuscar
+            # Al editar un mensaje dentro de un álbum, se mantiene en el álbum visualmente
+            # pero el contenido cambia a foto.
+            return self.tg.replace_video_with_photo(
+                chat_id=src_msg.chat.id,
+                message_id=src_msg.id,
+                photo_path=self.config.placeholder_image_path,
+                caption=caption_override,
+            )
+        except Exception as e:
+            logger.error(f"Error procesando item individual {src_msg.id}: {e}")
+            return False
+
+    def restore_album(self, media_group_id: str):
+        """
+        Restaura un álbum completo usando el ID de grupo.
+        """
+        logger.info(f"Iniciando restauración del álbum {media_group_id}...")
+        self.tg.start()
+
+        # A. Buscar todos los mensajes asociados a este álbum en el registro
+        entries = self.registry.get_entries_by_media_group(media_group_id)
+
+        if not entries:
+            logger.warning(
+                f"No se encontraron registros para el álbum {media_group_id}."
+            )
+            return
+
+        success_count = 0
+
+        # B. Iterar y restaurar cada parte
+        for entry in entries:
+            if entry["status"] == "restored":
+                logger.info(
+                    f"Mensaje {entry['source_message_id']} ya estaba restaurado."
+                )
+                continue
+
+            logger.info(f"Restaurando parte: {entry['source_message_id']}...")
+
+            restored = self.tg.restore_video_from_backup(
+                source_chat_id=entry["source_chat_id"],
+                source_message_id=entry["source_message_id"],
+                backup_chat_id=entry["backup_chat_id"],
+                backup_message_id=entry["backup_message_id"],
+                expected_unique_id=entry["video_meta"]["file_unique_id"],
+                caption=entry["original_caption"],
+            )
+
+            if restored:
+                self.registry.update_migration_status(
+                    entry["source_chat_id"], entry["source_message_id"], "restored"
+                )
+                success_count += 1
+            else:
+                logger.error(f"Fallo al restaurar mensaje {entry['source_message_id']}")
+
+        logger.info(
+            f"Restauración de álbum completada. {success_count}/{len(entries)} mensajes recuperados."
+        )
+        self.tg.stop()
+
+    def restore_batch(self, batch_id: str):
+        """
+        Restaura TODOS los mensajes pertenecientes a una sesión de migración específica.
+        """
+        entries = self.registry.get_entries_by_batch(batch_id)
+
+        if not entries:
+            logger.error(f"No se encontró el lote {batch_id}.")
+            return
+
+        logger.info(
+            f"Iniciando restauración masiva del lote {batch_id} ({len(entries)} elementos)..."
+        )
+        self.tg.start()
+
+        restored_count = 0
+
+        for entry in entries:
+            if entry["status"] == "restored":
+                continue
+
+            logger.info(f"Restaurando msg {entry['source_message_id']}...")
+
+            success = self.tg.restore_video_from_backup(
+                source_chat_id=entry["source_chat_id"],
+                source_message_id=entry["source_message_id"],
+                backup_chat_id=entry["backup_chat_id"],
+                backup_message_id=entry["backup_message_id"],
+                expected_unique_id=entry["video_meta"]["file_unique_id"],
+                caption=entry["original_caption"],
+            )
+
+            if success:
+                # 2. ACTUALIZAR REGISTRO
+                self.registry.update_migration_status(
+                    entry["source_chat_id"], entry["source_message_id"], "restored"
+                )
+
+                # 3. ELIMINAR RESPALDO (LIMPIEZA)
+                # Solo si la restauración fue exitosa, borramos la copia.
+                del_success = self.tg.delete_messages(
+                    entry["backup_chat_id"], entry["backup_message_id"]
+                )
+
+                if del_success:
+                    logger.info(
+                        f"Msg {entry['source_message_id']} restaurado y respaldo eliminado."
+                    )
+                else:
+                    logger.warning(
+                        f"Msg {entry['source_message_id']} restaurado, pero falló el borrado del respaldo."
+                    )
+
+                restored_count += 1
+                time.sleep(0.5)
+            else:
+                logger.error(
+                    f"Falló restauración de {entry['source_message_id']}. El respaldo NO se ha borrado."
+                )
+
+        self.tg.stop()
+        logger.info(
+            f"Restauración de lote completada. {restored_count}/{len(entries)} recuperados."
+        )
