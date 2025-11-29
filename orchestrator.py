@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from proyect_x.caracoltv import CaracolTV
 from proyect_x.config import get_config
 from proyect_x.logging_config import setup_logging
+from proyect_x.services.caracoltv import CaracolTV
 from proyect_x.services.publisher import EpisodePublisher
 from proyect_x.services.register import RegistryManager
 from proyect_x.services.telegram.client import TelegramService

@@ -1,8 +1,8 @@
 import logging
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 
-from proyect_x.caracoltv import CaracolTV
 from proyect_x.config import DownloaderConfig
+from proyect_x.services.caracoltv import CaracolTV
 from proyect_x.services.register import RegistryManager
 from proyect_x.yt_downloader.core.common import sleep_progress
 from proyect_x.yt_downloader.core.episode import (
@@ -10,7 +10,6 @@ from proyect_x.yt_downloader.core.episode import (
     get_episode_of_the_day,
     get_metadata,
 )
-from proyect_x.yt_downloader.exceptions import ScheduleNotFound
 
 logger = logging.getLogger(__name__)
 
@@ -36,24 +35,24 @@ def was_episode_published(url: str, registry: RegistryManager) -> bool:
     return False
 
 
-def should_wait_release(schedule_provider: CaracolTV):
-    """Determina si se debe esperar la hora de lanzamiento del capítulo."""
-    release_time = get_release_time(schedule_provider)
-    today = datetime.now()
-    if today < release_time:
-        return True
-    return False
+# def should_wait_release(schedule_provider: CaracolTV):
+#     """Determina si se debe esperar la hora de lanzamiento del capítulo."""
+#     release_time = schedule_provider.get_release_time()
+#     today = datetime.now()
+#     if today < release_time:
+#         return True
+#     return False
 
 
-def get_release_time(schedule_provider: CaracolTV) -> datetime:
-    """Obtiene la hora de lanzamiento del capítulo."""
-    schedule = schedule_provider.get_schedule_desafio()
-    if schedule:
-        release_time = schedule["endtime"] + timedelta(minutes=5)
-        return release_time
-    else:
-        logger.warning("No se pudo obtener la hora de lanzamiento del desafío.")
-        raise ScheduleNotFound("No se pudo obtener la hora de lanzamiento del desafío.")
+# def get_release_time(schedule_provider: CaracolTV) -> datetime:
+#     """Obtiene la hora de lanzamiento del capítulo."""
+#     schedule = schedule_provider.get_schedule_desafio()
+#     if schedule:
+#         release_time = schedule["endtime"] + timedelta(minutes=5)
+#         return release_time
+#     else:
+#         logger.warning("No se pudo obtener la hora de lanzamiento del desafío.")
+#         raise ScheduleNotFound("No se pudo obtener la hora de lanzamiento del desafío.")
 
 
 def wait_end_of_day():
@@ -63,16 +62,16 @@ def wait_end_of_day():
     sleep_progress((end_of_day - today).total_seconds())
 
 
-def wait_release(schedule_provider: CaracolTV):
-    """Espera hasta la hora de lanzamiento del capítulo segun la programacion de caracoltv."""
-    release_time = get_release_time(schedule_provider)
-    logger.info(
-        f"Hora de publicacion del capitulo en youtube: {release_time.strftime('%I:%M %p')}"
-    )
-    today = datetime.now()
-    difference = release_time - today
-    sleep_progress(difference.total_seconds())
-    return False
+# def wait_release(schedule_provider: CaracolTV):
+#     """Espera hasta la hora de lanzamiento del capítulo segun la programacion de caracoltv."""
+#     release_time = get_release_time(schedule_provider)
+#     logger.info(
+#         f"Hora de publicacion del capitulo en youtube: {release_time.strftime('%I:%M %p')}"
+#     )
+#     today = datetime.now()
+#     difference = release_time - today
+#     sleep_progress(difference.total_seconds())
+#     return False
 
 
 def get_episode_url(
@@ -80,37 +79,25 @@ def get_episode_url(
 ) -> str:
     url = None
     while url is None:
-        try:
-            if not config.url and should_skip_weekends():
-                wait_end_of_day()
-                continue
-            if not config.url and should_wait_release(schedule_provider):
-                # al finalizar la espera del lanzamiento,
-                # se vuelve a obtener la hora de lanzamiento para casos donde la programación pueda cambiar.
-                wait_release(schedule_provider)
-                continue
-
-            url = get_episode_of_the_day() if config.url is None else config.url
-            if url is None:
-                sleep_progress(120)
-                continue
-            elif config.check_episode_publication and was_episode_published(
-                url, registry
-            ):
-                logger.info(
-                    "El capítulo de hoy ya fue descargado. Esperando al siguiente."
-                )
-                wait_end_of_day()
-                url = None
-                continue
-
-            if config.url:
-                break
-
-        except ScheduleNotFound as e:
-            logger.error(f"Error al obtener la programación: {e}")
-            wait_10_minutes = datetime.now() + timedelta(minutes=10)
-            logger.info(f"Esperando hasta {wait_10_minutes.strftime('%I:%M %p')}")
-            sleep_progress((wait_10_minutes - datetime.now()).total_seconds())
+        if not config.url and should_skip_weekends():
+            wait_end_of_day()
             continue
+        if not config.url and schedule_provider.should_wait_release():
+            # al finalizar la espera del lanzamiento,
+            # se vuelve a obtener la hora de lanzamiento para casos donde la programación pueda cambiar.
+            schedule_provider.wait_release()
+            continue
+
+        url = get_episode_of_the_day() if config.url is None else config.url
+        if url is None:
+            sleep_progress(120)
+            continue
+        elif config.check_episode_publication and was_episode_published(url, registry):
+            logger.info("El capítulo de hoy ya fue descargado. Esperando al siguiente.")
+            wait_end_of_day()
+            url = None
+            continue
+
+        if config.url:
+            break
     return url

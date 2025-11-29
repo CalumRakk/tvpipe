@@ -2,8 +2,8 @@ import logging
 import time
 from typing import Generator, Optional
 
-from proyect_x.caracoltv import CaracolTV
 from proyect_x.config import DownloaderConfig
+from proyect_x.services.caracoltv import CaracolTV
 from proyect_x.services.register import RegistryManager
 from proyect_x.yt_downloader.schemas import EpisodeDownloadResult
 from proyect_x.yt_downloader.services.daily_download import (

@@ -1,4 +1,5 @@
 import datetime
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -6,7 +7,17 @@ import requests
 from lxml import etree  # type: ignore
 from unidecode import unidecode
 
+from proyect_x.yt_downloader.core.common import sleep_progress
+
 DAYS = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
+
+logger = logging.getLogger(__name__)
+
+
+class ScheduleNotFound(Exception):
+    def __init__(self, msg, code_error=-1):
+        super().__init__(msg)
+        self.code_error = code_error
 
 
 def get_day():
@@ -145,6 +156,43 @@ class CaracolTV:
         raise ValueError(
             f"El día '{day}' no es válido. Debe ser uno de: {', '.join(DAYS)}"
         )
+
+    def get_release_time(self) -> datetime:
+        """Obtiene la hora de lanzamiento del capítulo."""
+
+        schedule = self.get_schedule_desafio()
+        hits = 0
+        while schedule is None:
+            logger.warning("No se pudo obtener la hora de lanzamiento del desafío.")
+            sleep_progress(60 * 10)  # Espera 10 minutos
+            schedule = self.get_schedule_desafio()
+            hits += 1
+            if hits > 5:
+                raise ScheduleNotFound(
+                    "No se pudo obtener la hora de lanzamiento del desafío."
+                )
+
+        release_time = schedule["endtime"] + timedelta(minutes=5)
+        return release_time
+
+    def should_wait_release(self):
+        """Determina si se debe esperar la hora de lanzamiento del capítulo."""
+        release_time = self.get_release_time()
+        today = datetime.now()
+        if today < release_time:
+            return True
+        return False
+
+    def wait_release(self):
+        """Espera hasta la hora de lanzamiento del capítulo segun la programacion de caracoltv."""
+        release_time = self.get_release_time()
+        logger.info(
+            f"Hora de publicacion del capitulo en youtube: {release_time.strftime('%I:%M %p')}"
+        )
+        today = datetime.now()
+        difference = release_time - today
+        sleep_progress(difference.total_seconds())
+        return False
 
 
 if __name__ == "__main__":
