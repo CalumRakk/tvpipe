@@ -18,17 +18,20 @@ logger = logging.getLogger(__name__)
 
 class EpisodePipeline:
     def __init__(
-        self, config: DownloaderConfig, registry: RegistryManager, caracoltv: CaracolTV
+        self,
+        config: DownloaderConfig,
+        registry: RegistryManager,
+        schedule_provider: CaracolTV,
     ):
         self.config = config
         self.registry = registry
-        self.caracoltv = CaracolTV()
+        self.schedule_provider = schedule_provider
 
     def _step_get_url(self) -> Optional[str]:
         """Paso 1: Obtener la URL del episodio."""
         try:
             logger.info("Buscando URL del episodio...")
-            return get_episode_url(self.config, self.registry, self.caracoltv)
+            return get_episode_url(self.config, self.registry, self.schedule_provider)
         except Exception as e:
             logger.error(f"Fallo en paso [GET URL]: {e}")
             raise
