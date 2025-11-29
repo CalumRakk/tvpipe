@@ -9,7 +9,7 @@ from proyect_x.yt_downloader.runner import main_loop
 if __name__ == "__main__":
     setup_logging(f"logs/{Path(__file__).stem}.log")
 
-    config = get_config("configs.env")
+    config = get_config("config.env")
 
     register = RegistryManager()
     publisher = EpisodePublisher(telegram_config=config.telegram, registry=register)

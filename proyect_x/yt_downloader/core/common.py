@@ -2,8 +2,6 @@ import logging
 from time import sleep
 from typing import Any, Dict
 
-from proyect_x.yt_downloader.config import Settings as Config
-
 logger = logging.getLogger(__name__)
 
 
@@ -25,17 +23,12 @@ def sleep_progress(seconds: float):
             logger.info(f"{i} segundos restantes...")
 
 
-def get_ytdl_base_opts(config: "Config", extra_opts: Dict[str, Any]) -> Dict[str, Any]:
+def get_ytdl_base_opts(extra_opts: Dict[str, Any]) -> Dict[str, Any]:
     """Genera la configuración base para yt-dlp inyectando cookies si existen."""
     opts = {
         "quiet": True,
         "nocheckcertificate": True,
     }
-
-    if config.youtube_cookies_path and config.youtube_cookies_path.exists():
-        opts["cookiefile"] = str(config.youtube_cookies_path)
-    else:
-        logger.warning("No se ha configurado archivo de cookies o no existe.")
 
     if extra_opts:
         opts.update(extra_opts)

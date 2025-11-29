@@ -106,7 +106,7 @@ class Format(TypedDict, total=False):
     container: Optional[str]  # Contenedor, ej: "mp4"
     dynamic_range: Optional[str]  # Rango dinámico, ej: "SDR"
     downloader_options: Optional[dict]  # Opciones usadas por el downloader
-    format_index: Optional[int]  # Índice del formato
+    format_index: Optional[int]  # Indice del formato
     source_preference: Optional[int]  # Preferencia del origen (ej: youtube-dash)
     __needs_testing: Optional[bool]  # Interno de yt-dlp
 

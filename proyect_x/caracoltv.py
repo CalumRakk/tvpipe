@@ -1,10 +1,9 @@
 import datetime
-import locale
 from datetime import datetime, timedelta
 from typing import Optional
 
 import requests
-from lxml import etree
+from lxml import etree  # type: ignore
 from unidecode import unidecode
 
 DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]

@@ -67,7 +67,7 @@ class EpisodePublisher:
                 logger.error("No se obtuvieron videos válidos para publicar.")
                 return False
 
-            # 4. Enviar Álbum a destinos finales
+            # 4. Enviar Album a destinos finales
             caption = self.config.caption.format(episode=episode_number)
             # Agregar info técnica al caption (como tenías antes)
             for vid in uploaded_videos_info:
