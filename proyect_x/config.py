@@ -16,6 +16,7 @@ class TelegramConfig(BaseSettings):
     api_id: int
     api_hash: str
     session_name: str
+    to_telegram_working: Path
 
     # Soporta una lista de IDs (ints) o alias (strs).
     # En el .env se pone: TELEGRAM_CHAT_IDS="-100123, -100456, me"

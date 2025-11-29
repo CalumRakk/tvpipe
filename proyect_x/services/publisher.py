@@ -1,12 +1,12 @@
 import logging
 from pathlib import Path
-from typing import List, cast
+from typing import List
 
 from proyect_x.config import TelegramConfig
-from proyect_x.create_thumbnail_with_watermaker import add_watermark_to_image
 from proyect_x.services.register import RegistryManager
 from proyect_x.services.telegram.client import TelegramService
 from proyect_x.services.telegram.schemas import UploadedVideo
+from proyect_x.services.watermark import WatermarkService
 
 logger = logging.getLogger(__name__)
 
@@ -17,23 +17,11 @@ class EpisodePublisher:
         self.registry = registry
         self.watermark_text = "https://t.me/DESAFIO_SIGLO_XXI"
 
-        # Inicializamos el servicio independiente
-        # Nota: La ruta de session debería venir mejor formada desde config
-        from os import getenv
-        from platform import system
-
-        HOME = (
-            Path.home() / ".local/share"
-            if system() == "Linux"
-            else Path(cast(str, getenv("APPDATA")))
-        )
-        WORKTABLE = HOME / "toTelegram"
-
         self.tg_service = TelegramService(
             session_name=self.config.session_name,
             api_id=self.config.api_id,
             api_hash=self.config.api_hash,
-            workdir=WORKTABLE,
+            workdir=telegram_config.to_telegram_working,
         )
 
     def process_episode(self, episode_dled) -> bool:
@@ -53,7 +41,8 @@ class EpisodePublisher:
 
             # 2. Procesar Miniatura
             watermarked_thumb = Path("thumbnail_watermarked.jpg")
-            add_watermark_to_image(
+            water = WatermarkService()
+            water.add_watermark_to_image(
                 str(thumbnail_path), self.watermark_text, str(watermarked_thumb)
             )
 
@@ -75,6 +64,8 @@ class EpisodePublisher:
                 format_name = "HD" if vid.width > 720 else "SD"
                 caption += f"{format_name}: {size_mb:.2f} MB\n"
 
+            if not isinstance(self.config.chat_ids, list):
+                raise Exception("El chat_ids debe ser una lista.")
             target_chats = self.tg_service.send_album(
                 files=uploaded_videos_info,
                 caption=caption,
