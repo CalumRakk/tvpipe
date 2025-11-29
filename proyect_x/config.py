@@ -17,8 +17,7 @@ class MigrationConfig(BaseSettings):
     backup_chat_id: Union[int, str]
     placeholder_image_path: Path = Path("assets/placeholder.jpg")
 
-    # Límite de mensajes a procesar por ejecución para evitar FloodWait excesivo
-    batch_size: int = 50
+    batch_size: int = 0
 
     model_config = SettingsConfigDict(
         env_file="config.env", env_prefix="MIGRATION_", extra="ignore"

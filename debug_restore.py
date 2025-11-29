@@ -17,5 +17,6 @@ tg_service = TelegramService(
 migration = cast(MigrationConfig, config.migration)
 migration_service = ContentMigrator(migration, registry, tg_service)
 
-BATCH_ID = "20251129_090830"
-migration_service.restore_batch(BATCH_ID)
+BATCH_ID = "20251129_095945"
+tg_service.force_refresh_peers()
+migration_service.restore_batch(BATCH_ID, delete_backup=True)

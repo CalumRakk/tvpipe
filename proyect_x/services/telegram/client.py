@@ -390,8 +390,12 @@ class TelegramService:
             self.start()
         try:
             # copy_media_group devuelve la lista de mensajes generados en el destino
+            # TODO: disable_notification en config
             return self.client.copy_media_group(  # type: ignore
-                chat_id=target_chat_id, from_chat_id=from_chat_id, message_id=message_id
+                chat_id=target_chat_id,
+                from_chat_id=from_chat_id,
+                message_id=message_id,
+                disable_notification=True,
             )
         except Exception as e:
             logger.error(f"Error copiando media group {message_id}: {e}")

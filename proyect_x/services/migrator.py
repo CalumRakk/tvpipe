@@ -24,9 +24,8 @@ class ContentMigrator:
 
         # Texto que aparecerá debajo de la imagen placeholder
         self.obfuscation_caption = (
-            "<b>Contenido Movido</b>\n\n"
-            "Este video ha sido trasladado a nuestro canal de respaldo.\n"
-            "Únete aquí para verlo: https://t.me/TU_CANAL"
+            "<b>Este contenido ya no esta disponible.</b>\n\n"
+            "Únete aquí para verlo: https://t.me/DESAFIO_SIGLO_XXI"
         )
 
     def run_migration_batch(self):
@@ -41,11 +40,12 @@ class ContentMigrator:
         count = 0
 
         try:
-            history = self.tg.get_history(
+            history_generator = self.tg.get_history(
                 self.config.source_chat_id, limit=self.config.batch_size
             )
+            history_list = list(history_generator)
 
-            for message in history:
+            for message in reversed(history_list):
                 # 1. FILTRO: Solo procesar si es parte de un álbum
                 if not message.media_group_id:
                     logger.debug(f"Mensaje {message.id} ignorado (no es álbum).")
@@ -268,9 +268,12 @@ class ContentMigrator:
         )
         self.tg.stop()
 
-    def restore_batch(self, batch_id: str):
+    def restore_batch(self, batch_id: str, delete_backup: bool = False):
         """
-        Restaura TODOS los mensajes pertenecientes a una sesión de migración específica.
+        Restaura TODOS los mensajes de un lote.
+        Args:
+            batch_id: El ID del lote.
+            delete_backup: Si es True, elimina el mensaje del canal de respaldo tras restaurar.
         """
         entries = self.registry.get_entries_by_batch(batch_id)
 
@@ -306,19 +309,23 @@ class ContentMigrator:
                     entry["source_chat_id"], entry["source_message_id"], "restored"
                 )
 
-                # 3. ELIMINAR RESPALDO (LIMPIEZA)
+                # 3. ELIMINAR RESPALDO (LIMPIEZA OPCIONAL)
                 # Solo si la restauración fue exitosa, borramos la copia.
-                del_success = self.tg.delete_messages(
-                    entry["backup_chat_id"], entry["backup_message_id"]
-                )
-
-                if del_success:
-                    logger.info(
-                        f"Msg {entry['source_message_id']} restaurado y respaldo eliminado."
+                if delete_backup:
+                    del_success = self.tg.delete_messages(
+                        entry["backup_chat_id"], entry["backup_message_id"]
                     )
+                    if del_success:
+                        logger.info(
+                            f"Msg {entry['source_message_id']} restaurado y respaldo eliminado."
+                        )
+                    else:
+                        logger.warning(
+                            f"Msg {entry['source_message_id']} restaurado, pero falló el borrado del respaldo."
+                        )
                 else:
-                    logger.warning(
-                        f"Msg {entry['source_message_id']} restaurado, pero falló el borrado del respaldo."
+                    logger.info(
+                        f"Msg {entry['source_message_id']} restaurado. Respaldo conservado."
                     )
 
                 restored_count += 1

@@ -15,5 +15,5 @@ tg_service = TelegramService(
 )
 migration = cast(MigrationConfig, config.migration)
 migration = ContentMigrator(migration, registry, tg_service)
-# tg_service.force_refresh_peers()
+tg_service.force_refresh_peers()
 migration.run_migration_batch()
