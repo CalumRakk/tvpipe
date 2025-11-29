@@ -1,4 +1,5 @@
 import logging
+import tempfile
 from pathlib import Path
 from typing import List
 
@@ -40,51 +41,53 @@ class EpisodePublisher:
         try:
             # 1. Registrar descarga
             self._register_downloads(episode_number, videos)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # 2. Procesar Miniatura
+                watermarked_thumb = temp_dir / Path("thumbnail_watermarked.jpg")
+                self.watermark_service.add_watermark_to_image(
+                    str(thumbnail_path), self.watermark_text, str(watermarked_thumb)
+                )
 
-            # 2. Procesar Miniatura
-            watermarked_thumb = Path("thumbnail_watermarked.jpg")
-            self.watermark_service.add_watermark_to_image(
-                str(thumbnail_path), self.watermark_text, str(watermarked_thumb)
-            )
+                # 3. Preparar Videos (Subir o Reutilizar Caché)
+                self.tg_service.start()
+                uploaded_videos_info = self._prepare_videos_for_album(
+                    videos, watermarked_thumb
+                )
 
-            # 3. Preparar Videos (Subir o Reutilizar Caché)
-            self.tg_service.start()
-            uploaded_videos_info = self._prepare_videos_for_album(
-                videos, watermarked_thumb
-            )
+                if not uploaded_videos_info:
+                    logger.error("No se obtuvieron videos válidos para publicar.")
+                    return False
 
-            if not uploaded_videos_info:
-                logger.error("No se obtuvieron videos válidos para publicar.")
-                return False
+                # 4. Enviar Album a destinos finales
+                caption = self.config.caption.format(episode=episode_number)
+                # Agregar info técnica al caption (como tenías antes)
+                for vid in uploaded_videos_info:
+                    size_mb = vid.size_bytes / (1024 * 1024)
+                    format_name = "HD" if vid.width > 720 else "SD"
+                    caption += f"{format_name}: {size_mb:.2f} MB\n"
 
-            # 4. Enviar Album a destinos finales
-            caption = self.config.caption.format(episode=episode_number)
-            # Agregar info técnica al caption (como tenías antes)
-            for vid in uploaded_videos_info:
-                size_mb = vid.size_bytes / (1024 * 1024)
-                format_name = "HD" if vid.width > 720 else "SD"
-                caption += f"{format_name}: {size_mb:.2f} MB\n"
+                if not isinstance(self.config.chat_ids, list):
+                    raise Exception("El chat_ids debe ser una lista.")
+                target_chats = self.tg_service.send_album(
+                    files=uploaded_videos_info,
+                    caption=caption,
+                    dest_chat_ids=self.config.chat_ids,
+                )
 
-            if not isinstance(self.config.chat_ids, list):
-                raise Exception("El chat_ids debe ser una lista.")
-            target_chats = self.tg_service.send_album(
-                files=uploaded_videos_info,
-                caption=caption,
-                dest_chat_ids=self.config.chat_ids,
-            )
+                if not target_chats:
+                    logger.warning(
+                        "No se pudo enviar el álbum a ningún chat de destino."
+                    )
+                    return False
 
-            if not target_chats:
-                logger.warning("No se pudo enviar el álbum a ningún chat de destino.")
-                return False
+                # 5. Registrar Publicación
+                self.registry.register_episode_publication(episode_number)
 
-            # 5. Registrar Publicación
-            self.registry.register_episode_publication(episode_number)
-
-            user_info = self.tg_service.get_me()
-            logger.info(
-                f"Publicación del episodio {episode_number} completada por {user_info.username}."
-            )
-            return True
+                user_info = self.tg_service.get_me()
+                logger.info(
+                    f"Publicación del episodio {episode_number} completada por {user_info.username}."
+                )
+                return True
 
         except Exception as e:
             logger.error(
