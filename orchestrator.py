@@ -14,5 +14,5 @@ if __name__ == "__main__":
     register = RegistryManager()
     publisher = EpisodePublisher(telegram_config=config.telegram, registry=register)
 
-    for episode_dled in main_loop(config.youtube):
+    for episode_dled in main_loop(config.youtube, register):
         publisher.process_episode(episode_dled)

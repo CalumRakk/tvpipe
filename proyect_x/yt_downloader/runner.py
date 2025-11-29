@@ -3,6 +3,7 @@ import time
 from typing import Generator, Optional
 
 from proyect_x.config import DownloaderConfig
+from proyect_x.services.register import RegistryManager
 from proyect_x.yt_downloader.schemas import EpisodeDownloadResult
 from proyect_x.yt_downloader.services.daily_download import (
     parallel_downloads,
@@ -15,14 +16,15 @@ logger = logging.getLogger(__name__)
 
 
 class EpisodePipeline:
-    def __init__(self, config: DownloaderConfig):
+    def __init__(self, config: DownloaderConfig, registry: RegistryManager):
         self.config = config
+        self.registry = registry
 
     def _step_get_url(self) -> Optional[str]:
         """Paso 1: Obtener la URL del episodio."""
         try:
             logger.info("Buscando URL del episodio...")
-            return get_episode_url(self.config)
+            return get_episode_url(self.config, self.registry)
         except Exception as e:
             logger.error(f"Fallo en paso [GET URL]: {e}")
             raise
@@ -75,6 +77,8 @@ class EpisodePipeline:
                 continue
 
 
-def main_loop(config: DownloaderConfig) -> Generator[EpisodeDownloadResult, None, None]:
-    pipeline = EpisodePipeline(config)
+def main_loop(
+    config: DownloaderConfig, registry: RegistryManager
+) -> Generator[EpisodeDownloadResult, None, None]:
+    pipeline = EpisodePipeline(config, registry)
     yield from pipeline.start()

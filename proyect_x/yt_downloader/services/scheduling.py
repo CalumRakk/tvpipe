@@ -13,7 +13,6 @@ from proyect_x.yt_downloader.exceptions import ScheduleNotFound
 from proyect_x.yt_downloader.schemas import RELEASE_MODE
 
 logger = logging.getLogger(__name__)
-register = RegistryManager()
 
 
 def should_skip_weekends():
@@ -25,13 +24,13 @@ def should_skip_weekends():
     return False
 
 
-def was_episode_published(url: str) -> bool:
+def was_episode_published(url: str, registry: RegistryManager) -> bool:
     """Verifica si el episodio ya fue publicado."""
     metadata = get_metadata(url)
     title = metadata["title"]
     number = get_episode_number(title)
 
-    if register.was_episode_published(number):
+    if registry.was_episode_published(number):
         logger.info("El capítulo de hoy ya fue descargado.")
         return True
     return False
@@ -87,7 +86,7 @@ def wait_release(mode):
     return False
 
 
-def get_episode_url(config) -> str:
+def get_episode_url(config, registry: RegistryManager) -> str:
     url = None
     while url is None:
         try:
@@ -109,7 +108,9 @@ def get_episode_url(config) -> str:
             if url is None:
                 sleep_progress(120)
                 continue
-            elif config.check_episode_publication and was_episode_published(url):
+            elif config.check_episode_publication and was_episode_published(
+                url, registry
+            ):
                 logger.info(
                     "El capítulo de hoy ya fue descargado. Esperando al siguiente."
                 )
