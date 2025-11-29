@@ -12,17 +12,19 @@ logger = logging.getLogger(__name__)
 
 
 class EpisodePublisher:
-    def __init__(self, telegram_config: TelegramConfig, registry: RegistryManager):
+    def __init__(
+        self,
+        telegram_config: TelegramConfig,
+        registry: RegistryManager,
+        telegram_service: TelegramService,
+        watermark_service: WatermarkService,
+    ):
         self.config = telegram_config
         self.registry = registry
         self.watermark_text = "https://t.me/DESAFIO_SIGLO_XXI"
 
-        self.tg_service = TelegramService(
-            session_name=self.config.session_name,
-            api_id=self.config.api_id,
-            api_hash=self.config.api_hash,
-            workdir=telegram_config.to_telegram_working,
-        )
+        self.tg_service = telegram_service
+        self.watermark_service = watermark_service
 
     def process_episode(self, episode_dled) -> bool:
         """
@@ -41,8 +43,7 @@ class EpisodePublisher:
 
             # 2. Procesar Miniatura
             watermarked_thumb = Path("thumbnail_watermarked.jpg")
-            water = WatermarkService()
-            water.add_watermark_to_image(
+            self.watermark_service.add_watermark_to_image(
                 str(thumbnail_path), self.watermark_text, str(watermarked_thumb)
             )
 
