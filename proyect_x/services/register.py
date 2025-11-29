@@ -1,14 +1,41 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Optional, TypedDict, Union, cast
+from typing import List, Literal, Optional, TypedDict, Union, cast
 
 # Tipos de eventos y fuentes
 EventType = Literal["download", "upload", "publication"]
 Source = Literal["yt_downloader", "uploader", "orchestrator"]
 
 
-# Tipos de registro
+class VideoMeta(TypedDict):
+    file_unique_id: str  # El ID persistente para validación
+    width: int
+    height: int
+    duration: int
+    file_name: Optional[str]
+    file_size: int
+
+
+class MigrationEntry(TypedDict):
+    migration_id: str
+    # Coordenadas Origen
+    source_chat_id: int
+    source_message_id: int
+
+    # Coordenadas Respaldo (El "Puntero")
+    backup_chat_id: int
+    backup_message_id: int
+
+    # Huella digital y contenido
+    video_meta: VideoMeta
+    original_caption: Optional[str]
+
+    # Estado
+    timestamp: str
+    status: Literal["migrated", "restored", "backup_lost"]
+
+
 class RegisterEntry(TypedDict):
     event: EventType
     episode: str
@@ -37,6 +64,7 @@ class RegisterPublication(TypedDict):
 
 RegistryEntry = Union[RegisterEntry, RegisterVideoUpload, RegisterPublication]
 REGISTRY_FILE = Path.cwd() / "registry/download_registry.json"
+MIGRATION_REGISTRY_FILE = Path.cwd() / "registry/migration_registry.json"
 
 
 class RegistryManager:
@@ -156,3 +184,60 @@ class RegistryManager:
         if len(new_data) < len(data):
             self._save(new_data)
             print(f"Entrada inválida eliminada del registro para: {video_path.name}")
+
+    def _load_migration(self) -> List[MigrationEntry]:
+        """Carga específica para el registro de migración."""
+        if MIGRATION_REGISTRY_FILE.exists():
+            try:
+                with open(MIGRATION_REGISTRY_FILE, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error leyendo registro de migración: {e}")
+        return []
+
+    def _save_migration(self, data: List[MigrationEntry]) -> None:
+        MIGRATION_REGISTRY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(MIGRATION_REGISTRY_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+    def register_migration(
+        self,
+        source_chat_id: int,
+        source_msg_id: int,
+        backup_chat_id: int,
+        backup_msg_id: int,
+        video_meta: VideoMeta,
+        original_caption: Optional[str],
+    ) -> None:
+        entry: MigrationEntry = {
+            "migration_id": f"{source_chat_id}_{source_msg_id}",
+            "source_chat_id": source_chat_id,
+            "source_message_id": source_msg_id,
+            "backup_chat_id": backup_chat_id,
+            "backup_message_id": backup_msg_id,
+            "video_meta": video_meta,
+            "original_caption": original_caption,
+            "timestamp": datetime.now().isoformat(),
+            "status": "migrated",
+        }
+
+        data = self._load_migration()
+
+        data = [d for d in data if d["migration_id"] != entry["migration_id"]]
+        data.append(entry)
+        self._save_migration(data)
+
+    def is_message_migrated(self, source_chat_id: int, message_id: int) -> bool:
+        mid = f"{source_chat_id}_{message_id}"
+        data = self._load_migration()
+        return any(d["migration_id"] == mid and d["status"] == "migrated" for d in data)
+
+    def get_migration_entry(
+        self, source_chat_id: Union[int, str], message_id: int
+    ) -> Optional[MigrationEntry]:
+        mid = f"{source_chat_id}_{message_id}"
+        data = self._load_migration()
+        for entry in data:
+            if entry["migration_id"] == mid:
+                return entry
+        return None

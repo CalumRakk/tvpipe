@@ -7,6 +7,24 @@ from pydantic import computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class MigrationConfig(BaseSettings):
+    """
+    Configuración para la migración y ofuscación de canales.
+    Prefijo en .env: MIGRATION_
+    """
+
+    source_chat_id: Union[int, str]
+    backup_chat_id: Union[int, str]
+    placeholder_image_path: Path = Path("assets/placeholder.jpg")
+
+    # Límite de mensajes a procesar por ejecución para evitar FloodWait excesivo
+    batch_size: int = 50
+
+    model_config = SettingsConfigDict(
+        env_file="config.env", env_prefix="MIGRATION_", extra="ignore"
+    )
+
+
 class TelegramConfig(BaseSettings):
     """
     Configuración exclusiva para el servicio de Telegram.
@@ -113,6 +131,11 @@ class AppConfig:
         self.project = ProjectConfig(_env_file=env_path)  # type: ignore
         self.telegram = TelegramConfig(_env_file=env_path)  # type: ignore
         self.youtube = DownloaderConfig(_env_file=env_path)  # type: ignore
+        try:
+            # (opcional, para no romper si no están las vars aún)
+            self.migration = MigrationConfig(_env_file=env_path)  # type: ignore
+        except Exception:
+            self.migration = None
 
 
 @lru_cache()

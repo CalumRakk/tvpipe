@@ -1,15 +1,17 @@
 import logging
 from pathlib import Path
-from typing import List, Optional, Union, cast
+from typing import Generator, List, Optional, Union, cast
 
 from pyrogram import Client, enums  # type: ignore
 from pyrogram.errors import ChatWriteForbidden, PeerIdInvalid  # type: ignore
 from pyrogram.types import (  # type: ignore
     Chat,
     ChatMember,
+    InputMediaPhoto,
     InputMediaVideo,
     Message,
     User,
+    Video,
 )
 
 from .exceptions import AuthenticationError, PermissionDeniedError
@@ -101,7 +103,9 @@ class TelegramService:
             logger.error(f"Error verificando permisos en {chat_id}: {e}")
             return False
 
-    def get_message(self, chat_id: int, message_id: int) -> Optional[Message]:
+    def get_message(
+        self, chat_id: Union[int, str], message_id: int
+    ) -> Optional[Message]:
         """Obtiene un mensaje si existe y es accesible."""
         if not self.client.is_connected:
             self.start()
@@ -199,3 +203,166 @@ class TelegramService:
                 logger.error(f"Error enviando a destino {chat_id}: {e}")
 
         return cast(List[int], successful_chats)
+
+    # def restore_video_from_backup(
+    #     self,
+    #     source_chat_id: Union[int, str],
+    #     source_message_id: int,
+    #     backup_chat_id: Union[int, str],
+    #     backup_message_id: int,
+    #     expected_unique_id: str,  # Para validar que sea el video correcto
+    #     caption: Optional[str] = None,
+    # ) -> bool:
+    #     """
+    #     Restaura el video en el mensaje original obteniéndolo desde el respaldo.
+    #     """
+    #     if not self.client.is_connected:
+    #         self.start()
+
+    #     # 1. Consultar si la referencia (el respaldo) aún existe
+    #     backup_msg = self.get_message(backup_chat_id, backup_message_id)
+
+    #     if not backup_msg or not backup_msg.video:
+    #         logger.error(
+    #             f"Error Crítico: El mensaje de respaldo {backup_message_id} en {backup_chat_id} ya no existe o no tiene video."
+    #         )
+    #         return False
+
+    #     # 2. Validar integridad (¿Es el mismo video que guardamos?)
+    #     current_video: Video = backup_msg.video
+    #     if current_video.file_unique_id != expected_unique_id:
+    #         logger.warning(
+    #             f"Integridad fallida: El video en respaldo ({current_video.file_unique_id}) "
+    #             f"no coincide con el registro ({expected_unique_id}). Se aborta restauración."
+    #         )
+    #         return False
+
+    #     # 3. Obtener el file_id FRESCO (válido para esta sesión)
+    #     fresh_file_id = current_video.file_id
+
+    #     # 4. Editar el mensaje original
+    #     try:
+    #         media = InputMediaVideo(
+    #             media=fresh_file_id, caption=caption or "", supports_streaming=True
+    #         )
+
+    #         self.client.edit_message_media(  # type: ignore
+    #             chat_id=source_chat_id, message_id=source_message_id, media=media
+    #         )
+    #         logger.info(f"Video restaurado exitosamente en mensaje {source_message_id}")
+    #         return True
+
+    #     except Exception as e:
+    #         logger.error(f"Error al editar mensaje original durante restauración: {e}")
+    #         return False
+
+    def get_history(
+        self, chat_id: Union[int, str], limit: int = 50
+    ) -> Generator[Message, None, None]:
+        """Itera sobre el historial de mensajes."""
+        if not self.client.is_connected:
+            self.start()
+        return self.client.get_chat_history(chat_id, limit=limit)  # type: ignore
+
+    def copy_message(
+        self,
+        target_chat_id: Union[int, str],
+        from_chat_id: Union[int, str],
+        message_id: int,
+    ) -> Optional[Message]:
+        """Copia un mensaje al destino (Backup)."""
+        if not self.client.is_connected:
+            self.start()
+        try:
+            return self.client.copy_message(  # type: ignore
+                chat_id=target_chat_id, from_chat_id=from_chat_id, message_id=message_id
+            )
+        except Exception as e:
+            logger.error(f"Error copiando mensaje {message_id}: {e}")
+            return None
+
+    def replace_video_with_photo(
+        self,
+        chat_id: Union[int, str],
+        message_id: int,
+        photo_path: Union[str, Path],
+        caption: str = "",
+    ) -> bool:
+        """OFUSCACIÓN: Reemplaza el video por una imagen."""
+        if not self.client.is_connected:
+            self.start()
+        try:
+            media = InputMediaPhoto(media=str(photo_path), caption=caption)
+            self.client.edit_message_media(  # type: ignore
+                chat_id=chat_id, message_id=message_id, media=media
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error ofuscando mensaje {message_id}: {e}")
+            return False
+
+    def restore_video_from_backup(
+        self,
+        source_chat_id: Union[int, str],
+        source_message_id: int,
+        backup_chat_id: Union[int, str],
+        backup_message_id: int,
+        expected_unique_id: str,
+        caption: Optional[str] = None,
+    ) -> bool:
+        """RESTAURACIÓN: Obtiene file_id fresco del respaldo y restaura el original."""
+        if not self.client.is_connected:
+            self.start()
+
+        # 1. Verificar si el respaldo sigue vivo
+        backup_msg = self.get_message(backup_chat_id, backup_message_id)
+        if not backup_msg or not backup_msg.video:
+            logger.error(f"Respaldo perdido o inválido para msg {source_message_id}")
+            return False
+
+        # 2. Validar integridad (file_unique_id)
+        current_video: Video = backup_msg.video
+        if current_video.file_unique_id != expected_unique_id:
+            logger.critical(
+                f"INTEGRIDAD COMPROMETIDA: El video en respaldo ({current_video.file_unique_id}) "
+                f"no coincide con el registro ({expected_unique_id})."
+            )
+            return False
+
+        # 3. Restaurar usando el file_id fresco
+        try:
+            # supports_streaming=True es importante para videos largos
+            media = InputMediaVideo(
+                media=current_video.file_id,
+                caption=caption or "",
+                supports_streaming=True,
+            )
+            self.client.edit_message_media(  # type: ignore
+                chat_id=source_chat_id, message_id=source_message_id, media=media
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error restaurando mensaje {source_message_id}: {e}")
+            return False
+
+    def force_refresh_peers(self):
+        """
+        Recorre los diálogos para actualizar la caché de peers de Pyrogram.
+        Soluciona el error 'PeerIdInvalid' en chats nuevos o no cacheados.
+        """
+        if not self.client.is_connected:
+            self.start()
+
+        logger.info("Actualizando caché de peers (resolviendo access_hash)...")
+        try:
+            # Iteramos sobre los diálogos. No necesitamos hacer nada con ellos,
+            # el simple hecho de recibirlos hace que Pyrogram guarde los metadatos.
+            count = 0
+            # Limitamos a 200 por si tienes miles de chats, suele ser suficiente
+            # para que aparezcan los recientes (como los canales nuevos).
+            for _ in self.client.get_dialogs(limit=200):  # type: ignore
+                count += 1
+
+            logger.info(f"Caché de peers actualizado. Escaneados {count} diálogos.")
+        except Exception as e:
+            logger.warning(f"Error intentando refrescar peers: {e}")
