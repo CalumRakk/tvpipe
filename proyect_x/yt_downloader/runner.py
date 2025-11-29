@@ -2,7 +2,7 @@ import logging
 import time
 from typing import Generator, Optional
 
-from proyect_x.yt_downloader.config.settings import AppSettings
+from proyect_x.config import DownloaderConfig
 from proyect_x.yt_downloader.schemas import EpisodeDownloadResult
 from proyect_x.yt_downloader.services.daily_download import (
     parallel_downloads,
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class EpisodePipeline:
-    def __init__(self, config: AppSettings):
+    def __init__(self, config: DownloaderConfig):
         self.config = config
 
     def _step_get_url(self) -> Optional[str]:
@@ -75,6 +75,6 @@ class EpisodePipeline:
                 continue
 
 
-def main_loop(config: AppSettings) -> Generator[EpisodeDownloadResult, None, None]:
+def main_loop(config: DownloaderConfig) -> Generator[EpisodeDownloadResult, None, None]:
     pipeline = EpisodePipeline(config)
     yield from pipeline.start()

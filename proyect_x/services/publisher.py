@@ -2,18 +2,18 @@ import logging
 from pathlib import Path
 from typing import List, cast
 
+from proyect_x.config import TelegramConfig
 from proyect_x.create_thumbnail_with_watermaker import add_watermark_to_image
 from proyect_x.services.register import RegistryManager
 from proyect_x.services.telegram.client import TelegramService
 from proyect_x.services.telegram.schemas import UploadedVideo
-from proyect_x.uploader.settings import AppSettings
 
 logger = logging.getLogger(__name__)
 
 
 class EpisodePublisher:
-    def __init__(self, config: AppSettings, registry: RegistryManager):
-        self.config = config
+    def __init__(self, telegram_config: TelegramConfig, registry: RegistryManager):
+        self.config = telegram_config
         self.registry = registry
         self.watermark_text = "https://t.me/DESAFIO_SIGLO_XXI"
 
@@ -27,7 +27,7 @@ class EpisodePublisher:
             if system() == "Linux"
             else Path(cast(str, getenv("APPDATA")))
         )
-        WORKTABLE = HOME / self.config.project_name
+        WORKTABLE = HOME / "toTelegram"
 
         self.tg_service = TelegramService(
             session_name=self.config.session_name,
@@ -172,7 +172,6 @@ class EpisodePublisher:
                 )
                 final_list.append(uploaded_video)
 
-        # Ordenar por tamaño (lógica de tu uploader original) para que quede estético el álbum
         final_list.sort(key=lambda x: x.size_bytes)
         return final_list
 
