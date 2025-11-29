@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from proyect_x.caracoltv import CaracolTV
 from proyect_x.config import get_config
 from proyect_x.logging_config import setup_logging
 from proyect_x.services.publisher import EpisodePublisher
@@ -14,6 +15,9 @@ if __name__ == "__main__":
     config = get_config("config.env")
 
     register = RegistryManager()
+
+    schedule_provider = CaracolTV()
+
     tg_service = TelegramService(
         session_name=config.telegram.session_name,
         api_id=config.telegram.api_id,
@@ -22,6 +26,7 @@ if __name__ == "__main__":
     )
 
     watermark_service = WatermarkService()
+
     publisher = EpisodePublisher(
         telegram_config=config.telegram,
         registry=register,
@@ -29,5 +34,5 @@ if __name__ == "__main__":
         watermark_service=watermark_service,
     )
 
-    for episode_dled in main_loop(config.youtube, register):
+    for episode_dled in main_loop(config.youtube, register, schedule_provider):
         publisher.process_episode(episode_dled)

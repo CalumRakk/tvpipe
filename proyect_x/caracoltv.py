@@ -6,8 +6,7 @@ import requests
 from lxml import etree  # type: ignore
 from unidecode import unidecode
 
-DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-URL_SCHEDULE = "https://www.caracoltv.com/programacion"
+DAYS = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
 
 
 def get_day():
@@ -19,6 +18,8 @@ class CaracolTV:
     """
     Clase para manejar la descarga de series de Caracol TV.
     """
+
+    URL_SCHEDULE = "https://www.caracoltv.com/programacion"
 
     def _maker_request(self, url):
         headers = {
@@ -132,7 +133,7 @@ class CaracolTV:
         Args:
             day (str): Nombre del día en español (ej. "Lunes", "Martes", etc.). Soporta excluir acentos.
         """
-        root = self._get_root(URL_SCHEDULE)
+        root = self._get_root(self.URL_SCHEDULE)
         day_target = unidecode(day).lower()
         schedule_all = {}
         for DAY in DAYS:

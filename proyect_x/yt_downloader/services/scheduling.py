@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, time, timedelta
 
 from proyect_x.caracoltv import CaracolTV
+from proyect_x.config import DownloaderConfig
 from proyect_x.services.register import RegistryManager
 from proyect_x.yt_downloader.core.common import sleep_progress
 from proyect_x.yt_downloader.core.episode import (
@@ -10,7 +11,6 @@ from proyect_x.yt_downloader.core.episode import (
     get_metadata,
 )
 from proyect_x.yt_downloader.exceptions import ScheduleNotFound
-from proyect_x.yt_downloader.schemas import RELEASE_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -36,35 +36,24 @@ def was_episode_published(url: str, registry: RegistryManager) -> bool:
     return False
 
 
-def wait_until_release(config):
-    # TODO: Corregir nombre de la función.
-    """Espera hasta la hora de lanzamiento del capítulo (especificada en release_time)."""
-    release_time = get_release_time(config)
+def should_wait_release(schedule_provider: CaracolTV):
+    """Determina si se debe esperar la hora de lanzamiento del capítulo."""
+    release_time = get_release_time(schedule_provider)
     today = datetime.now()
     if today < release_time:
         return True
     return False
 
 
-def get_release_time(config) -> datetime:
-    # Si se usa el modo "auto", se obtiene la hora de lanzamiento del desafío.
-    # Si no, se usa una hora fija.
-    # Por defecto, se establece a las 21:30 del día actual.
-    release_time = None
-    if config.mode == RELEASE_MODE.AUTO:
-        caractol = CaracolTV()
-        schedule = caractol.get_schedule_desafio()
-        if schedule:
-            release_time = schedule["endtime"] + timedelta(minutes=5)
-            return release_time
-        else:
-            logger.warning("No se pudo obtener la hora de lanzamiento del desafío.")
-            raise ScheduleNotFound(
-                "No se pudo obtener la hora de lanzamiento del desafío."
-            )
+def get_release_time(schedule_provider: CaracolTV) -> datetime:
+    """Obtiene la hora de lanzamiento del capítulo."""
+    schedule = schedule_provider.get_schedule_desafio()
+    if schedule:
+        release_time = schedule["endtime"] + timedelta(minutes=5)
+        return release_time
     else:
-        release_time = datetime.combine(datetime.now().date(), config.release_hour)
-    return release_time
+        logger.warning("No se pudo obtener la hora de lanzamiento del desafío.")
+        raise ScheduleNotFound("No se pudo obtener la hora de lanzamiento del desafío.")
 
 
 def wait_end_of_day():
@@ -74,9 +63,9 @@ def wait_end_of_day():
     sleep_progress((end_of_day - today).total_seconds())
 
 
-def wait_release(mode):
-    """Espera hasta la hora de lanzamiento del capítulo (especificada en release_time)."""
-    release_time = get_release_time(mode)
+def wait_release(schedule_provider: CaracolTV):
+    """Espera hasta la hora de lanzamiento del capítulo segun la programacion de caracoltv."""
+    release_time = get_release_time(schedule_provider)
     logger.info(
         f"Hora de publicacion del capitulo en youtube: {release_time.strftime('%I:%M %p')}"
     )
@@ -86,22 +75,19 @@ def wait_release(mode):
     return False
 
 
-def get_episode_url(config, registry: RegistryManager) -> str:
+def get_episode_url(
+    config: DownloaderConfig, registry: RegistryManager, schedule_provider: CaracolTV
+) -> str:
     url = None
     while url is None:
         try:
             if not config.url and should_skip_weekends():
                 wait_end_of_day()
                 continue
-            if (
-                not config.url
-                and wait_until_release(config)
-                and config.mode is RELEASE_MODE.AUTO
-            ):
-                # TODO creo que se puede eliminar la opcion RELEASE_MODE. Esta opcion podria funcionar con solo especificar la hora de lanzamiento sino se especifica es porque se usa el modo auto
-                # Si mode está en auto, al finalizar la espera del lanzamiento,
+            if not config.url and should_wait_release(schedule_provider):
+                # al finalizar la espera del lanzamiento,
                 # se vuelve a obtener la hora de lanzamiento para casos donde la programación pueda cambiar.
-                wait_release(config)
+                wait_release(schedule_provider)
                 continue
 
             url = get_episode_of_the_day() if config.url is None else config.url
