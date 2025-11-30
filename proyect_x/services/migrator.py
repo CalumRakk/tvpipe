@@ -1,12 +1,17 @@
 import logging
+import random
 import time
 from datetime import datetime
+from typing import Optional
 
+from git import List
+from pyparsing import cast
 from pyrogram.types import Message  # type: ignore
 
 from proyect_x.config import MigrationConfig
 from proyect_x.services.register import RegistryManager, VideoMeta
 from proyect_x.services.telegram.client import TelegramService
+from proyect_x.yt_downloader.core.common import sleep_progress
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +30,8 @@ class ContentMigrator:
         # Texto que aparecerá debajo de la imagen placeholder
         self.obfuscation_caption = (
             "<b>Este contenido ya no esta disponible.</b>\n\n"
-            "Únete aquí para verlo: https://t.me/DESAFIO_SIGLO_XXI"
+            "Únete aquí para verlo: https://t.me/desafiosiglo_xxi"
+            "\n\n<b>By Lein</b>"
         )
 
     def run_migration_batch(self):
@@ -48,13 +54,22 @@ class ContentMigrator:
             for message in reversed(history_list):
                 # 1. FILTRO: Solo procesar si es parte de un álbum
                 if not message.media_group_id:
-                    logger.debug(f"Mensaje {message.id} ignorado (no es álbum).")
+                    logger.info(f"Mensaje {message.id} ignorado (no es álbum).")
                     continue
 
                 # 2. CACHÉ: Si ya procesamos este grupo, saltar
                 if message.media_group_id in processed_media_groups:
+                    logger.info(
+                        f"Mensaje {message.id} ignorado (álbum ya procesado)."
+                    )
                     continue
 
+                if not message.video:
+                    logger.info(
+                        f"Mensaje {message.id} ignorado (álbum sin video)."
+                    )
+                    continue
+                    
                 # 3. PROCESAR EL GRUPO ENTERO
                 success = self._process_album_batch(message, current_batch_id)
 
@@ -329,7 +344,8 @@ class ContentMigrator:
                     )
 
                 restored_count += 1
-                time.sleep(0.5)
+                sleep_= random.randint(1,4)
+                sleep_progress(sleep_)
             else:
                 logger.error(
                     f"Falló restauración de {entry['source_message_id']}. El respaldo NO se ha borrado."
@@ -339,3 +355,11 @@ class ContentMigrator:
         logger.info(
             f"Restauración de lote completada. {restored_count}/{len(entries)} recuperados."
         )
+
+
+    def get_media_group_id(self, message_id: str)->Optional[str]:
+        self.tg.start()
+        message = cast(List[Message], self.tg.get_media_group(self.config.source_chat_id, int(message_id)))
+        for i in message:
+            return i .media_group_id 
+        return None

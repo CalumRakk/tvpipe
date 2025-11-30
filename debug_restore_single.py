@@ -15,9 +15,10 @@ tg_service = TelegramService(
     api_hash=config.telegram.api_hash,
     workdir=config.telegram.to_telegram_working,
 )
-migration = cast(MigrationConfig, config.migration)
-migration = ContentMigrator(migration, registry, tg_service)
+config = cast(MigrationConfig, config.migration)
+migrator = ContentMigrator(config, registry, tg_service)
+# tg_service.force_refresh_peers()
 
-migration.run_migration_batch()
-
-
+group_media= migrator.get_media_group_id("87")
+if group_media:
+    migrator.restore_album(group_media)

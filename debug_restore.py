@@ -1,11 +1,13 @@
 from typing import cast
 
 from proyect_x.config import MigrationConfig, get_config
+from proyect_x.logging_config import setup_logging
 from proyect_x.services.migrator import ContentMigrator
 from proyect_x.services.register import RegistryManager
 from proyect_x.services.telegram.client import TelegramService
 
 # Configuración
+setup_logging("restore" + ".log")
 config = get_config("config.env")
 registry = RegistryManager()
 tg_service = TelegramService(
@@ -16,7 +18,5 @@ tg_service = TelegramService(
 )
 migration = cast(MigrationConfig, config.migration)
 migration_service = ContentMigrator(migration, registry, tg_service)
-
-BATCH_ID = "20251129_095945"
-tg_service.force_refresh_peers()
+BATCH_ID = "20251130_004938"
 migration_service.restore_batch(BATCH_ID, delete_backup=True)

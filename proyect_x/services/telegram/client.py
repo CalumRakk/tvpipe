@@ -204,58 +204,6 @@ class TelegramService:
 
         return cast(List[int], successful_chats)
 
-    # def restore_video_from_backup(
-    #     self,
-    #     source_chat_id: Union[int, str],
-    #     source_message_id: int,
-    #     backup_chat_id: Union[int, str],
-    #     backup_message_id: int,
-    #     expected_unique_id: str,  # Para validar que sea el video correcto
-    #     caption: Optional[str] = None,
-    # ) -> bool:
-    #     """
-    #     Restaura el video en el mensaje original obteniéndolo desde el respaldo.
-    #     """
-    #     if not self.client.is_connected:
-    #         self.start()
-
-    #     # 1. Consultar si la referencia (el respaldo) aún existe
-    #     backup_msg = self.get_message(backup_chat_id, backup_message_id)
-
-    #     if not backup_msg or not backup_msg.video:
-    #         logger.error(
-    #             f"Error Crítico: El mensaje de respaldo {backup_message_id} en {backup_chat_id} ya no existe o no tiene video."
-    #         )
-    #         return False
-
-    #     # 2. Validar integridad (¿Es el mismo video que guardamos?)
-    #     current_video: Video = backup_msg.video
-    #     if current_video.file_unique_id != expected_unique_id:
-    #         logger.warning(
-    #             f"Integridad fallida: El video en respaldo ({current_video.file_unique_id}) "
-    #             f"no coincide con el registro ({expected_unique_id}). Se aborta restauración."
-    #         )
-    #         return False
-
-    #     # 3. Obtener el file_id FRESCO (válido para esta sesión)
-    #     fresh_file_id = current_video.file_id
-
-    #     # 4. Editar el mensaje original
-    #     try:
-    #         media = InputMediaVideo(
-    #             media=fresh_file_id, caption=caption or "", supports_streaming=True
-    #         )
-
-    #         self.client.edit_message_media(  # type: ignore
-    #             chat_id=source_chat_id, message_id=source_message_id, media=media
-    #         )
-    #         logger.info(f"Video restaurado exitosamente en mensaje {source_message_id}")
-    #         return True
-
-    #     except Exception as e:
-    #         logger.error(f"Error al editar mensaje original durante restauración: {e}")
-    #         return False
-
     def get_history(
         self, chat_id: Union[int, str], limit: int = 50
     ) -> Generator[Message, None, None]:
