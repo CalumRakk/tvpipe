@@ -34,25 +34,20 @@ def main_loop(
 
     while True:
         try:
-            # 1. Obtener URL
             url = get_episode_url(config, registry, schedule)
             if not url:
                 time.sleep(60)
                 continue
 
-            # 2. Obtener Metadatos (Pydantic)
             meta = client.get_metadata(url)
             episode_num = get_episode_number_from_title(meta.title)
 
-            # 3. Estrategia de Selección
-            # Iteramos sobre las calidades de config (ej: ["best", "360"])
             quality_pref = str(config.qualities[0]) if config.qualities else "1080p"
 
             video_stream, audio_stream = client.select_best_pair(
                 meta, quality_preference=quality_pref, require_mp4=config.output_as_mp4
             )
 
-            # 4. Descarga secuencial.
             vid_path = (
                 temp_dir
                 / f"{config.serie_slug}_{episode_num}_{video_stream.format_id}.{video_stream.ext}"
@@ -62,10 +57,10 @@ def main_loop(
                 / f"{config.serie_slug}_{episode_num}_{audio_stream.format_id}.{audio_stream.ext}"
             )
 
-            client.download_stream(video_stream, vid_path)
-            client.download_stream(audio_stream, aud_path)
+            client.download_stream(video_stream, vid_path, url)
+            client.download_stream(audio_stream, aud_path, url)
 
-            # 5. Procesamiento
+            # Procesamiento
             final_filename = f"{config.serie_slug}.capitulo.{episode_num}.mp4"
             final_path = config.download_folder / final_filename
 
@@ -78,7 +73,7 @@ def main_loop(
             )
             download_thumbnail(meta.thumbnail_url, thumb_path)
 
-            # 6. Yield Resultado
+            # Yield Resultado
             yield DownloadedEpisode(
                 episode_number=episode_num,
                 video_path=final_path,

@@ -37,10 +37,6 @@ def merge_video_audio(video_path: Path, audio_path: Path, output_path: Path):
         logger.error(f"Error en FFmpeg: {e}")
         raise
 
-    # Limpieza básica opcional (o dejarla al orquestador)
-    # video_path.unlink(missing_ok=True)
-    # audio_path.unlink(missing_ok=True)
-
 
 def download_thumbnail(url: Optional[str], output_path: Path) -> Path:
     if not url:

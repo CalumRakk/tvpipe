@@ -52,8 +52,8 @@ class Fragment(TypedDict):
     Representa un fragmento de un archivo de video/audio descargado por partes.
     """
 
-    url: str  # URL del fragmento
-    duration: float  # Duración del fragmento en segundos
+    url: str
+    duration: float
 
 
 class HttpHeaders(TypedDict, total=False):

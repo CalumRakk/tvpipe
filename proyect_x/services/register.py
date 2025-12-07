@@ -3,13 +3,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Literal, Optional, TypedDict, Union, cast
 
-# Tipos de eventos y fuentes
 EventType = Literal["download", "upload", "publication"]
 Source = Literal["yt_downloader", "uploader", "orchestrator"]
 
 
 class VideoMeta(TypedDict):
-    file_unique_id: str  # El ID persistente para validación
+    file_unique_id: str
     width: int
     height: int
     duration: int
@@ -19,21 +18,17 @@ class VideoMeta(TypedDict):
 
 class MigrationEntry(TypedDict):
     migration_id: str
-    # Coordenadas Origen
     source_chat_id: int
     source_message_id: int
     media_group_id: str
     batch_id: str
 
-    # Coordenadas Respaldo (El "Puntero")
     backup_chat_id: int
     backup_message_id: int
 
-    # Huella digital y contenido
     video_meta: VideoMeta
     original_caption: Optional[str]
 
-    # Estado
     timestamp: str
     status: Literal["migrated", "restored", "backup_lost"]
 

@@ -39,16 +39,14 @@ class EpisodePublisher:
         logger.info(f"Iniciando flujo de publicación para episodio {episode_number}")
 
         try:
-            # 1. Registrar descarga
             self._register_downloads(episode_number, videos)
             with tempfile.TemporaryDirectory() as temp_dir:
-                # 2. Procesar Miniatura
+
                 watermarked_thumb = temp_dir / Path("thumbnail_watermarked.jpg")
                 self.watermark_service.add_watermark_to_image(
                     str(thumbnail_path), self.watermark_text, str(watermarked_thumb)
                 )
 
-                # 3. Preparar Videos (Subir o Reutilizar Caché)
                 self.tg_service.start()
                 uploaded_videos_info = self._prepare_videos_for_album(
                     videos, watermarked_thumb
@@ -58,9 +56,8 @@ class EpisodePublisher:
                     logger.error("No se obtuvieron videos válidos para publicar.")
                     return False
 
-                # 4. Enviar Album a destinos finales
                 caption = self.config.caption.format(episode=episode_number)
-                # Agregar info técnica al caption (como tenías antes)
+                # Agregar info técnica al caption
                 for vid in uploaded_videos_info:
                     size_mb = vid.size_bytes / (1024 * 1024)
                     format_name = "HD" if vid.width > 720 else "SD"
@@ -147,7 +144,7 @@ class EpisodePublisher:
                     logger.info("Entrada de caché inválida. Limpiando registro.")
                     self.registry.remove_video_entry(video_path)
 
-            # B. Si no hay caché válido, subir video
+            # Si no hay caché válido, subir video
             if cached_entry:
                 final_list.append(cached_entry)
             else:
@@ -156,10 +153,9 @@ class EpisodePublisher:
                     video_path=video_path,
                     thumbnail_path=thumbnail_path,
                     target_chat_id=self.config.chat_id_temporary,
-                    caption=video_path.name,  # Caption temporal
+                    caption=video_path.name,
                 )
 
-                # Guardar en registro para la próxima
                 self.registry.register_video_uploaded(
                     message_id=uploaded_video.message_id,
                     chat_id=uploaded_video.chat_id,

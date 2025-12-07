@@ -1,4 +1,5 @@
 import logging
+import shutil
 from pathlib import Path
 from typing import Any, Tuple, cast
 
@@ -11,10 +12,12 @@ logger = logging.getLogger(__name__)
 
 class YtDlpClient:
     def __init__(self, check_certificate: bool = False):
-        # Any para ignorar el tipado de yt_dlp
+        node_path = shutil.which("node") or "node"
+
         self.base_opts: Any = {
             "quiet": True,
             "nocheckcertificate": not check_certificate,
+            "js_runtimes": {"node": {"args": [node_path]}},
         }
 
     def get_metadata(self, url: str) -> VideoMetadata:
@@ -50,27 +53,25 @@ class YtDlpClient:
     ) -> Tuple[Stream, Stream]:
         """
         Selecciona el mejor par Video + Audio basado en la calidad deseada.
-        Reemplaza toda la lógica compleja de `formats.py`.
         """
-        # 1. Parsear calidad objetivo (ej: "1080p" -> 1080)
         target_h = (
             int(quality_preference.replace("p", ""))
             if "p" in quality_preference
             else 1080
         )
 
-        # 2. Filtrar videos candidatos
+        # Filtrar videos candidatos
         candidates = [s for s in meta.streams if s.is_video]
 
         if require_mp4:
             candidates = [s for s in candidates if s.is_h264]
 
-        if not candidates:
-            raise ValueError(
-                f"No se encontraron streams de video compatibles (MP4={require_mp4})"
-            )
+            if not candidates:
+                raise ValueError(
+                    f"No se encontraron streams de video compatibles (MP4={require_mp4})"
+                )
 
-        # 3. Ordenar: Primero por cercanía a la altura, luego por bitrate/tamaño
+        # Ordenar: Primero por cercanía a la altura, luego por bitrate/tamaño
         #    La key ordena por diferencia absoluta de altura (menor es mejor) y luego tamaño (mayor es mejor)
         best_video = sorted(
             candidates, key=lambda s: (abs(s.height - target_h), -s.size_bytes)  # type: ignore
@@ -96,8 +97,10 @@ class YtDlpClient:
 
         return best_video, best_audio
 
-    def download_stream(self, stream: Stream, output_path: Path) -> Path:
-        """Descarga un stream específico a la ruta indicada."""
+    def download_stream(self, stream: Stream, output_path: Path, url: str) -> Path:
+        """
+        Descarga un stream específico usando la URL original del video.
+        """
         if output_path.exists():
             logger.info(f"Archivo ya existe, saltando descarga: {output_path.name}")
             return output_path
@@ -111,7 +114,8 @@ class YtDlpClient:
         )
 
         logger.info(f"Descargando {stream.format_id} -> {output_path.name}...")
+
         with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([stream.url])  # type: ignore
+            ydl.download([url])
 
         return output_path

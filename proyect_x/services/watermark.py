@@ -47,15 +47,15 @@ class WatermarkService:
 
         try:
             with Image.open(input_path).convert("RGBA") as base_image:
-                # 1. Capturamos la capa de texto generada
+                # Capturamos la capa de texto generada
                 watermark_layer = self._apply_watermark_layer(base_image, text, font)
 
-                # 2. Fusionamos la imagen base con la capa de texto
+                # Fusionamos la imagen base con la capa de texto
                 final_image = Image.alpha_composite(base_image, watermark_layer)
 
                 output_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # 3. Guardamos la imagen resultante
+                # Guardamos la imagen resultante
                 final_image.convert("RGB").save(output_path, "JPEG")
 
         except Exception as e:

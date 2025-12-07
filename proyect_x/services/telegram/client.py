@@ -262,13 +262,13 @@ class TelegramService:
         if not self.client.is_connected:
             self.start()
 
-        # 1. Verificar si el respaldo sigue vivo
+        # Verificar si el respaldo sigue vivo
         backup_msg = self.get_message(backup_chat_id, backup_message_id)
         if not backup_msg or not backup_msg.video:
             logger.error(f"Respaldo perdido o inválido para msg {source_message_id}")
             return False
 
-        # 2. Validar integridad (file_unique_id)
+        # Validar integridad (file_unique_id)
         current_video: Video = backup_msg.video
         if current_video.file_unique_id != expected_unique_id:
             logger.critical(
@@ -277,7 +277,7 @@ class TelegramService:
             )
             return False
 
-        # 3. Restaurar usando el file_id fresco
+        # Restaurar usando el file_id fresco
         try:
             # supports_streaming=True es importante para videos largos
             media = InputMediaVideo(

@@ -2,9 +2,8 @@ import logging
 import random
 import time
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
-from git import List
 from pyparsing import cast
 from pyrogram.types import Message  # type: ignore
 
@@ -59,17 +58,13 @@ class ContentMigrator:
 
                 # 2. CACHÉ: Si ya procesamos este grupo, saltar
                 if message.media_group_id in processed_media_groups:
-                    logger.info(
-                        f"Mensaje {message.id} ignorado (álbum ya procesado)."
-                    )
+                    logger.info(f"Mensaje {message.id} ignorado (álbum ya procesado).")
                     continue
 
                 if not message.video:
-                    logger.info(
-                        f"Mensaje {message.id} ignorado (álbum sin video)."
-                    )
+                    logger.info(f"Mensaje {message.id} ignorado (álbum sin video).")
                     continue
-                    
+
                 # 3. PROCESAR EL GRUPO ENTERO
                 success = self._process_album_batch(message, current_batch_id)
 
@@ -88,11 +83,9 @@ class ContentMigrator:
             self.tg.stop()
 
     def _should_migrate(self, message: Message) -> bool:
-        # 1. Debe tener video
         if not message.video:
             return False
 
-        # 2. No debe haber sido migrado antes
         if self.registry.is_message_migrated(message.chat.id, message.id):
             return False
 
@@ -120,7 +113,6 @@ class ContentMigrator:
 
         if success:
             logger.info(f"Mensaje {message_id} restaurado exitosamente.")
-            # Actualizar estado en registro a "restored" (tarea pendiente en registry)
 
     def _process_album_batch(self, trigger_message: Message, batch_id: str) -> bool:
         """
@@ -133,7 +125,7 @@ class ContentMigrator:
             f"Procesando Media Group ID: {group_id} detectado en msg {trigger_message.id}"
         )
 
-        # A. Obtener todas las partes ORIGINALES del álbum
+        # Obtener todas las partes ORIGINALES del álbum
         # Pyrogram las devuelve ordenadas por ID
         source_messages = self.tg.get_media_group(chat_id, trigger_message.id)
         if not source_messages:
@@ -147,7 +139,7 @@ class ContentMigrator:
                 )
                 return False
 
-        # B. Copiar todo el bloque al Respaldo
+        # Copiar todo el bloque al Respaldo
         backup_messages = self.tg.copy_media_group(
             target_chat_id=self.config.backup_chat_id,
             from_chat_id=chat_id,
@@ -160,7 +152,7 @@ class ContentMigrator:
             )
             return False
 
-        # C. Emparejar (Zip) y Procesar Individualmente
+        # Emparejar (Zip) y Procesar Individualmente
         # Asumimos que el orden se mantiene (Telegram suele garantizar esto por ID incremental)
         # Ordenamos ambas listas por ID para asegurar correspondencia 1:1
         source_messages.sort(key=lambda m: m.id)
@@ -208,7 +200,6 @@ class ContentMigrator:
                 "file_size": vid.file_size,
             }
 
-            # 1. Registrar
             self.registry.register_migration(
                 source_chat_id=src_msg.chat.id,
                 source_msg_id=src_msg.id,
@@ -220,7 +211,7 @@ class ContentMigrator:
                 batch_id=batch_id,
             )
 
-            # 2. Ofuscar
+            # Ofuscar
             # Al editar un mensaje dentro de un álbum, se mantiene en el álbum visualmente
             # pero el contenido cambia a foto.
             return self.tg.replace_video_with_photo(
@@ -240,7 +231,6 @@ class ContentMigrator:
         logger.info(f"Iniciando restauración del álbum {media_group_id}...")
         self.tg.start()
 
-        # A. Buscar todos los mensajes asociados a este álbum en el registro
         entries = self.registry.get_entries_by_media_group(media_group_id)
 
         if not entries:
@@ -251,7 +241,6 @@ class ContentMigrator:
 
         success_count = 0
 
-        # B. Iterar y restaurar cada parte
         for entry in entries:
             if entry["status"] == "restored":
                 logger.info(
@@ -319,12 +308,12 @@ class ContentMigrator:
             )
 
             if success:
-                # 2. ACTUALIZAR REGISTRO
+                # ACTUALIZAR REGISTRO
                 self.registry.update_migration_status(
                     entry["source_chat_id"], entry["source_message_id"], "restored"
                 )
 
-                # 3. ELIMINAR RESPALDO (LIMPIEZA OPCIONAL)
+                # ELIMINAR RESPALDO (LIMPIEZA OPCIONAL)
                 # Solo si la restauración fue exitosa, borramos la copia.
                 if delete_backup:
                     del_success = self.tg.delete_messages(
@@ -344,7 +333,7 @@ class ContentMigrator:
                     )
 
                 restored_count += 1
-                sleep_= random.randint(1,4)
+                sleep_ = random.randint(1, 4)
                 sleep_progress(sleep_)
             else:
                 logger.error(
@@ -356,10 +345,12 @@ class ContentMigrator:
             f"Restauración de lote completada. {restored_count}/{len(entries)} recuperados."
         )
 
-
-    def get_media_group_id(self, message_id: str)->Optional[str]:
+    def get_media_group_id(self, message_id: str) -> Optional[str]:
         self.tg.start()
-        message = cast(List[Message], self.tg.get_media_group(self.config.source_chat_id, int(message_id)))
+        message = cast(
+            List[Message],
+            self.tg.get_media_group(self.config.source_chat_id, int(message_id)),
+        )
         for i in message:
-            return i .media_group_id 
+            return i.media_group_id
         return None
