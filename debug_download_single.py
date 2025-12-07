@@ -1,20 +1,14 @@
 import logging
-import re
 from pathlib import Path
 
 from proyect_x.config import get_config
 from proyect_x.logging_config import setup_logging
 from proyect_x.yt_downloader.client import YtDlpClient
 from proyect_x.yt_downloader.processing import download_thumbnail, merge_video_audio
+from proyect_x.yt_downloader.runner import get_episode_number_from_title
 
 # --- CONFIGURACIÓN DE LA PRUEBA ---
 TEST_URL = "https://www.youtube.com/watch?v=pfELv3BsuVQ"
-
-
-def get_episode_number_from_title(title: str) -> str:
-    """Extrae el número de episodio para nombrar el archivo (Lógica copiada de runner.py)"""
-    match = re.search(r"ap[íi]tulo\s+(\d+)", title, re.IGNORECASE)
-    return match.group(1) if match else "00_TEST"
 
 
 def debug_single_download():

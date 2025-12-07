@@ -10,7 +10,7 @@ from pyrogram.types import Message  # type: ignore
 from proyect_x.config import MigrationConfig
 from proyect_x.services.register import RegistryManager, VideoMeta
 from proyect_x.services.telegram.client import TelegramService
-from proyect_x.yt_downloader.core.common import sleep_progress
+from proyect_x.utils import sleep_progress
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +51,12 @@ class ContentMigrator:
             history_list = list(history_generator)
 
             for message in reversed(history_list):
-                # 1. FILTRO: Solo procesar si es parte de un álbum
+                # FILTRO: Solo procesar si es parte de un álbum
                 if not message.media_group_id:
                     logger.info(f"Mensaje {message.id} ignorado (no es álbum).")
                     continue
 
-                # 2. CACHÉ: Si ya procesamos este grupo, saltar
+                # CACHÉ: Si ya procesamos este grupo, saltar
                 if message.media_group_id in processed_media_groups:
                     logger.info(f"Mensaje {message.id} ignorado (álbum ya procesado).")
                     continue
@@ -65,7 +65,7 @@ class ContentMigrator:
                     logger.info(f"Mensaje {message.id} ignorado (álbum sin video).")
                     continue
 
-                # 3. PROCESAR EL GRUPO ENTERO
+                # PROCESAR EL GRUPO ENTERO
                 success = self._process_album_batch(message, current_batch_id)
 
                 # Marcar grupo como procesado (éxito o fallo, para no reintentar en este loop)

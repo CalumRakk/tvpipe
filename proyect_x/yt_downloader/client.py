@@ -43,6 +43,8 @@ class YtDlpClient:
             thumbnail_url=info.get("thumbnail"),
             duration=info.get("duration"),
             streams=streams,
+            timestamp=info["timestamp"],
+            was_live=info["is_live"],
         )
 
     def select_best_pair(

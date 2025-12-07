@@ -49,6 +49,8 @@ class VideoMetadata(BaseModel):
     thumbnail_url: Optional[str] = None
     duration: Optional[int] = None
     streams: List[Stream] = Field(default_factory=list)
+    timestamp: int
+    was_live: bool
 
 
 class DownloadedEpisode(BaseModel):

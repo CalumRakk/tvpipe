@@ -3,9 +3,9 @@ import logging
 import re
 from pathlib import Path
 from time import sleep
+from typing import Union
 
 import filetype
-from git import Union
 
 logger = logging.getLogger(__name__)
 

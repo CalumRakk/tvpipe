@@ -7,7 +7,7 @@ import requests
 from lxml import etree  # type: ignore
 from unidecode import unidecode
 
-from proyect_x.yt_downloader.core.common import sleep_progress
+from proyect_x.utils import sleep_progress
 
 DAYS = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
 
