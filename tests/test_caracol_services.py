@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 sys.path.append(os.getcwd())
-# Importamos tus clases
 from tvpipe.services.caracoltv_schedule import CaracolTVSchedule
 from tvpipe.services.program_monitor import ProgramMonitor
 

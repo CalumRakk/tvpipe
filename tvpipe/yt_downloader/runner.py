@@ -2,9 +2,7 @@ import logging
 import re
 import time
 from datetime import datetime
-from typing import Generator, Optional, cast
-
-import yt_dlp
+from typing import Generator
 
 from tvpipe.config import DownloaderConfig
 from tvpipe.services.program_monitor import ProgramMonitor
@@ -50,43 +48,52 @@ def wait_end_of_day():
     logger.info("Dia terminado.")
 
 
-def get_episode_of_the_day(client: YtDlpClient) -> Optional[str]:
+def is_valid_episode_title(title: str) -> bool:
+    """
+    Define explícitamente qué constituye un episodio válido.
+    Usa la extracción del número de episodio como validación.
+    """
+    try:
+        episode_num = get_episode_number_from_title(title)
+        return bool(episode_num) and "avance" in title
+    except Exception:
+        return False
 
-    logger.info("Consiguiendo el episodio del día...")
-    url = "https://www.youtube.com/@desafiocaracol/videos"
-    ydl_opts: yt_dlp._Params = {
-        "extract_flat": True,
-        "playlistend": 5,
-        "quiet": True,
-        "no_warnings": True,
-    }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = cast(dict, ydl.extract_info(url, download=False))
-        for entry in info["entries"]:
-            try:
-                title = entry["title"]
-                url = entry["url"]
-                # Truco para identificar el video que es el "capitulo"
-                number = get_episode_number_from_title(title)
-                if number is None:
-                    continue
+# def get_episode_of_the_day(client: YtDlpClient) -> Optional[str]:
 
-                # Verificamos que el capítulo haya sido publicado el día actual.
-                info = client.get_metadata(url)
-                timestamp = datetime.fromtimestamp(info.timestamp)
+#     logger.info("Consiguiendo el episodio del día...")
+#     url = "https://www.youtube.com/@desafiocaracol/videos"
+#     ydl_opts: yt_dlp._Params = {
+#         "extract_flat": True,
+#         "playlistend": 5,
+#         "quiet": True,
+#         "no_warnings": True,
+#     }
 
-                is_today = timestamp.date() == datetime.now().date()
-                if (
-                    is_today
-                    and info.was_live is False
-                    and not "avance" in title.lower()
-                ):
-                    logger.info(f"Encontrado el episodio del dia: {title}")
-                    return url
-            except Exception:
-                continue
-        logger.info(f"No se encontró el episodio del dia.")
+#     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+#         info = cast(dict, ydl.extract_info(url, download=False))
+#         for entry in info["entries"]:
+#             try:
+#                 title = entry["title"]
+#                 url = entry["url"]
+#                 # Truco para identificar el video que es el "capitulo"
+#                 number = get_episode_number_from_title(title)
+#                 if number is None:
+#                     continue
+
+#                 # Verificamos que el capítulo haya sido publicado el día actual.
+#                 info = client.get_metadata(url)
+#                 timestamp = datetime.fromtimestamp(info.timestamp)
+
+#                 is_today = timestamp.date() == datetime.now().date()
+#                 if is_today and info.was_live is False:
+#                     logger.info(f"¡Match confirmado!: {title}")
+#                     return url
+#             except Exception:
+#                 logger.warning(f"Error verificando metadatos de {url}: {e}")
+#                 continue
+#         logger.info(f"No se encontró el episodio del dia.")
 
 
 def main_loop(
@@ -97,7 +104,7 @@ def main_loop(
 
     temp_dir = config.download_folder / "TEMP"
     temp_dir.mkdir(parents=True, exist_ok=True)
-
+    CHANNEL_URL = "https://www.youtube.com/@desafiocaracol/videos"
     logger.info("Iniciando bucle principal de descargas (Refactorizado)")
 
     try:
@@ -113,7 +120,9 @@ def main_loop(
                     # se vuelve a obtener la hora de lanzamiento para casos donde la programación pueda cambiar.
                     monitor.wait_until_release()
                     continue
-                url = get_episode_of_the_day(client)
+                url = client.find_video_by_criteria(
+                    channel_url=CHANNEL_URL, title_validator=is_valid_episode_title
+                )
                 if url is None:
                     sleep_progress(120)
                     continue

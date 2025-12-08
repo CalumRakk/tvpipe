@@ -1,7 +1,8 @@
 import logging
 import shutil
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Tuple, cast
+from typing import Any, Callable, Optional, Tuple, cast
 
 import yt_dlp
 
@@ -121,3 +122,51 @@ class YtDlpClient:
             ydl.download([url])
 
         return output_path
+
+    def find_video_by_criteria(
+        self, channel_url: str, title_validator: Callable[[str], bool]
+    ) -> Optional[str]:
+        """
+        Busca en el canal un video que cumpla con el validador de título
+        y que haya sido publicado HOY.
+        """
+        logger.info(f"Escaneando canal: {channel_url}")
+
+        search_opts = self.base_opts.copy()
+        search_opts.update(
+            {
+                "extract_flat": True,
+                "playlistend": 5,
+            }
+        )
+
+        with yt_dlp.YoutubeDL(search_opts) as ydl:
+            # download=False y extract_flat=True hacen que esto sea muy rápido
+            info = cast(dict, ydl.extract_info(channel_url, download=False))
+
+            if not info or "entries" not in info:
+                return None
+
+            for entry in info["entries"]:
+                title = entry.get("title", "")
+                url = entry.get("url", "")
+
+                if not title_validator(title):
+                    continue
+
+                # Validación de seguridad (Fecha y Live)
+                try:
+                    meta = self.get_metadata(url)
+
+                    video_date = datetime.fromtimestamp(meta.timestamp).date()
+                    is_today = video_date == datetime.now().date()
+
+                    if is_today and not meta.was_live:
+                        logger.info(f"¡Match confirmado!: {title}")
+                        return url
+
+                except Exception as e:
+                    logger.warning(f"Error verificando metadatos de {url}: {e}")
+                    continue
+
+            return None
