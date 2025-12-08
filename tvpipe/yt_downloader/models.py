@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, cast
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -41,6 +41,15 @@ class Stream(BaseModel):
     def is_aac(self) -> bool:
         """Verifica si es audio compatible con MP4 estándar (mp4a)."""
         return "mp4a" in (self.acodec or "").lower()
+
+
+class StreamPair(BaseModel):
+    video: Stream
+    audio: Stream
+
+    @property
+    def height(self) -> int:
+        return cast(int, self.video.height)
 
 
 class VideoMetadata(BaseModel):

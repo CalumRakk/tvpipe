@@ -4,7 +4,7 @@ from pathlib import Path
 from tvpipe.config import get_config
 from tvpipe.logging_config import setup_logging
 from tvpipe.yt_downloader.client import YtDlpClient
-from tvpipe.yt_downloader.processing import download_thumbnail, merge_video_audio
+from tvpipe.yt_downloader.processing import download_thumbnail
 from tvpipe.yt_downloader.runner import get_episode_number_from_title
 
 # --- CONFIGURACIÓN DE LA PRUEBA ---
@@ -20,7 +20,6 @@ def debug_single_download():
 
     logger.info(f"--- Iniciando prueba de descarga para: {TEST_URL} ---")
     client = YtDlpClient()
-
     try:
         # Obtener Metadatos
         logger.info("Obteniendo metadatos...")
@@ -29,50 +28,24 @@ def debug_single_download():
         logger.info(f"Título detectado: {meta.title}")
         logger.info(f"Episodio detectado: {episode_num}")
 
-        # Seleccionar Calidad
+        # Selecciona StreamPar
         quality_pref = str(yt_config.qualities[0]) if yt_config.qualities else "1080p"
-        logger.info(f"Buscando calidad preferida: {quality_pref}")
-
-        video_stream, audio_stream = client.select_best_pair(
+        stream = client.select_best_pair(
             meta, quality_preference=quality_pref, require_mp4=False
         )
 
-        # Preparar rutas
-        temp_dir = yt_config.download_folder / "TEMP"
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        # Crear nombre de archivo
+        filename = config.youtube.generate_filename(episode_num, stream.height)
+        output_path = config.youtube.download_folder / filename
 
-        vid_path = (
-            temp_dir
-            / f"DEBUG_{yt_config.serie_slug}_{episode_num}_{video_stream.format_id}.{video_stream.ext}"
-        )
-        aud_path = (
-            temp_dir
-            / f"DEBUG_{yt_config.serie_slug}_{episode_num}_{audio_stream.format_id}.{audio_stream.ext}"
-        )
+        logger.info(f"Descargando Video ({stream.height}p)...")
+        client.download_stream(stream, output_path, TEST_URL)
 
-        final_filename = f"DEBUG_{yt_config.serie_slug}.capitulo.{episode_num}.mp4"
-        final_path = yt_config.download_folder / final_filename
-
-        # Descargar Streams
-        logger.info(f"Descargando Video ({video_stream.height}p)...")
-        client.download_stream(video_stream, vid_path, TEST_URL)
-
-        logger.info(f"Descargando Audio ({audio_stream.acodec})...")
-        client.download_stream(audio_stream, aud_path, TEST_URL)
-
-        # Procesamiento
-        logger.info("Fusionando audio y video...")
-        merge_video_audio(vid_path, aud_path, final_path)
-
-        # Miniatura
-        thumb_path = (
-            yt_config.download_folder
-            / f"DEBUG_{yt_config.serie_slug}.capitulo.{episode_num}.jpg"
-        )
+        thumb_path = output_path.with_suffix(".jpg")
         download_thumbnail(meta.thumbnail_url, thumb_path)
 
         logger.info(f"PRUEBA EXITOSA.")
-        logger.info(f"Video guardado en: {final_path}")
+        logger.info(f"Video guardado en: {output_path}")
         logger.info(f"Miniatura guardada en: {thumb_path}")
 
     except Exception as e:

@@ -11,7 +11,7 @@ from tvpipe.utils import sleep_progress
 
 from .client import YtDlpClient
 from .models import DownloadedEpisode
-from .processing import download_thumbnail, merge_video_audio
+from .processing import download_thumbnail
 
 # from .services.scheduling import get_episode_url
 
@@ -60,50 +60,11 @@ def is_valid_episode_title(title: str) -> bool:
         return False
 
 
-# def get_episode_of_the_day(client: YtDlpClient) -> Optional[str]:
-
-#     logger.info("Consiguiendo el episodio del día...")
-#     url = "https://www.youtube.com/@desafiocaracol/videos"
-#     ydl_opts: yt_dlp._Params = {
-#         "extract_flat": True,
-#         "playlistend": 5,
-#         "quiet": True,
-#         "no_warnings": True,
-#     }
-
-#     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-#         info = cast(dict, ydl.extract_info(url, download=False))
-#         for entry in info["entries"]:
-#             try:
-#                 title = entry["title"]
-#                 url = entry["url"]
-#                 # Truco para identificar el video que es el "capitulo"
-#                 number = get_episode_number_from_title(title)
-#                 if number is None:
-#                     continue
-
-#                 # Verificamos que el capítulo haya sido publicado el día actual.
-#                 info = client.get_metadata(url)
-#                 timestamp = datetime.fromtimestamp(info.timestamp)
-
-#                 is_today = timestamp.date() == datetime.now().date()
-#                 if is_today and info.was_live is False:
-#                     logger.info(f"¡Match confirmado!: {title}")
-#                     return url
-#             except Exception:
-#                 logger.warning(f"Error verificando metadatos de {url}: {e}")
-#                 continue
-#         logger.info(f"No se encontró el episodio del dia.")
-
-
 def main_loop(
     config: DownloaderConfig, registry: RegistryManager, monitor: ProgramMonitor
 ) -> Generator[DownloadedEpisode, None, None]:
 
     client = YtDlpClient()
-
-    temp_dir = config.download_folder / "TEMP"
-    temp_dir.mkdir(parents=True, exist_ok=True)
     CHANNEL_URL = "https://www.youtube.com/@desafiocaracol/videos"
     logger.info("Iniciando bucle principal de descargas (Refactorizado)")
 
@@ -137,39 +98,21 @@ def main_loop(
                 continue
 
             quality_pref = str(config.qualities[0]) if config.qualities else "1080p"
-            video_stream, audio_stream = client.select_best_pair(
+            stream = client.select_best_pair(
                 meta, quality_preference=quality_pref, require_mp4=config.output_as_mp4
             )
+            filename = config.generate_filename(episode_num, stream.height)
+            output_path = config.download_folder / filename
 
-            vid_path = (
-                temp_dir
-                / f"{config.serie_slug}_{episode_num}_{video_stream.format_id}.{video_stream.ext}"
-            )
-            aud_path = (
-                temp_dir
-                / f"{config.serie_slug}_{episode_num}_{audio_stream.format_id}.{audio_stream.ext}"
-            )
+            client.download_stream(stream, output_path, url)
 
-            client.download_stream(video_stream, vid_path, url)
-            client.download_stream(audio_stream, aud_path, url)
-
-            # Procesamiento
-            final_filename = f"{config.serie_slug}.capitulo.{episode_num}.mp4"
-            final_path = config.download_folder / final_filename
-
-            merge_video_audio(vid_path, aud_path, final_path)
-
-            # Miniatura
-            thumb_path = (
-                config.download_folder
-                / f"{config.serie_slug}.capitulo.{episode_num}.jpg"
-            )
+            thumb_path = output_path.with_suffix(".jpg")
             download_thumbnail(meta.thumbnail_url, thumb_path)
 
             # Yield Resultado
             yield DownloadedEpisode(
                 episode_number=episode_num,
-                video_path=final_path,
+                video_path=output_path,
                 thumbnail_path=thumb_path,
             )
 

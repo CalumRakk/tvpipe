@@ -97,7 +97,7 @@ class DownloaderConfig(BaseSettings):
 
     @computed_field
     @property
-    def serie_slug(self) -> str:
+    def serie_name_slug(self) -> str:
         """Slug normalizado para nombres de archivo."""
         return self.serie_name.strip().replace(" ", ".").replace("/", "-").lower()
 
@@ -107,6 +107,14 @@ class DownloaderConfig(BaseSettings):
         if isinstance(v, str):
             return [x.strip().lower() for x in v.split(",")]
         return v
+
+    def generate_filename(
+        self, episode: str, resolution: int, extension: str = "mp4"
+    ) -> str:
+        """Genera el nombre estandarizado para un episodio."""
+        # zfill(2) asegura que episodio 5 sea "05"
+        ep_str = str(episode).zfill(2)
+        return f"{self.serie_name_slug}.capitulo.{ep_str}.yt.{resolution}p.{extension}"
 
 
 class ProjectConfig(BaseSettings):

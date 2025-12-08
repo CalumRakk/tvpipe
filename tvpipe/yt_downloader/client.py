@@ -2,11 +2,11 @@ import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional, Tuple, cast
+from typing import Any, Callable, Optional, cast
 
 import yt_dlp
 
-from .models import Stream, VideoMetadata
+from .models import Stream, StreamPair, VideoMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class YtDlpClient:
         meta: VideoMetadata,
         quality_preference: str = "1080p",
         require_mp4: bool = True,
-    ) -> Tuple[Stream, Stream]:
+    ) -> StreamPair:
         """
         Selecciona el mejor par Video + Audio basado en la calidad deseada.
         """
@@ -98,29 +98,31 @@ class YtDlpClient:
         ]
         logger.info(f"Audio seleccionado: {best_audio.acodec} ({best_audio.format_id})")
 
-        return best_video, best_audio
+        return StreamPair(video=best_video, audio=best_audio)
 
-    def download_stream(self, stream: Stream, output_path: Path, url: str) -> Path:
+    def download_stream(self, stream: StreamPair, output_path: Path, url: str) -> Path:
         """
         Descarga un stream específico usando la URL original del video.
         """
+        temp_video = output_path.with_suffix(".temp")
+
         if output_path.exists():
             logger.info(f"Archivo ya existe, saltando descarga: {output_path.name}")
             return output_path
 
-        opts = self.base_opts.copy()
-        opts.update(
-            {
-                "format": stream.format_id,
-                "outtmpl": str(output_path),
-            }
-        )
+        if not temp_video.exists():
+            opts = self.base_opts.copy()
+            opts.update(
+                {
+                    "format": f"{stream.video.format_id}+{stream.audio.format_id}",
+                    "outtmpl": str(temp_video),
+                }
+            )
 
-        logger.info(f"Descargando {stream.format_id} -> {output_path.name}...")
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.download([url])
 
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
-
+        temp_video.rename(output_path)
         return output_path
 
     def find_video_by_criteria(
