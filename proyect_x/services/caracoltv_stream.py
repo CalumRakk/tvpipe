@@ -5,13 +5,13 @@ import m3u8
 import requests
 
 
-class CaracolLiveStream:
+class CaracolTVStream:
     url = "https://mdstrm.com/live-stream-playlist/574463697b9817cf0886fc17.m3u8?access_token={access_token}"
 
     def __init__(self):
         pass
 
-    def get_access_token(self):
+    def _get_access_token(self):
         logger = logging.getLogger(__name__)
         API_ACCESS_TOKEN = "https://ms-live.noticiascaracol.com/vide-public-token/ctv"
         params = {
@@ -43,7 +43,7 @@ class CaracolLiveStream:
         logger = logging.getLogger(__name__)
         logger.info("Fetching master playlist")
 
-        access_token = self.get_access_token()
+        access_token = self._get_access_token()
         url = self.url.format(access_token=access_token)
 
         logger.info("URL MASTER: " + url)

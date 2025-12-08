@@ -7,7 +7,7 @@ from typing import Generator, Optional, cast
 import yt_dlp
 
 from proyect_x.config import DownloaderConfig
-from proyect_x.services.caracoltv import CaracolTV
+from proyect_x.services.program_monitor import ProgramMonitor
 from proyect_x.services.register import RegistryManager
 from proyect_x.utils import sleep_progress
 
@@ -90,7 +90,7 @@ def get_episode_of_the_day(client: YtDlpClient) -> Optional[str]:
 
 
 def main_loop(
-    config: DownloaderConfig, registry: RegistryManager, schedule: CaracolTV
+    config: DownloaderConfig, registry: RegistryManager, monitor: ProgramMonitor
 ) -> Generator[DownloadedEpisode, None, None]:
 
     client = YtDlpClient()
@@ -108,10 +108,10 @@ def main_loop(
                     logger.info("Es fin de semana. Esperando a que finalice el dia.")
                     wait_end_of_day()
                     continue
-                elif schedule.should_wait_release():
+                elif monitor.should_wait():
                     # al finalizar la espera del lanzamiento,
                     # se vuelve a obtener la hora de lanzamiento para casos donde la programación pueda cambiar.
-                    schedule.wait_release()
+                    monitor.wait_until_release()
                     continue
                 url = get_episode_of_the_day(client)
                 if url is None:
