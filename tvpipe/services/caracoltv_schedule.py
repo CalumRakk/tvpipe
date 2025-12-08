@@ -121,11 +121,6 @@ class CaracolTVSchedule:
             # TODO: El valor de `day` esta en español, pero se usa key de dict en ingles.
         return scheduls
 
-    # def get_schedule(self):
-    #     """Obtiene laprogramación para el día actual."""
-    #     day = get_day_name()
-    #     return self.get_schedule_by_day(day)
-
     def get_schedule_by_day(self, day: str) -> list[dict]:
         """Obtiene la programación para un día específico.
         Args:
@@ -148,50 +143,3 @@ class CaracolTVSchedule:
     def get_today_schedule(self) -> list[dict]:
         """Alias conveniente para el día actual."""
         return self.get_schedule_by_day(get_day_name())
-
-    # def get_schedule_desafio(
-    #     self,
-    # ) -> Optional[dict]:
-    #     """Obtiene la programación del dia actual del desafío o None si no hay programa.."""
-    #     schedule = self.get_schedule()
-    #     for item in schedule:
-    #         # Se usa la URL del desafío para identificar el programa
-    #         if "https://www.caracoltv.com/desafio" in item.get("url", ""):
-    #             return item
-
-    # def get_release_time(self) -> datetime:
-    #     """Obtiene la hora de lanzamiento del capítulo."""
-
-    #     schedule = self.get_schedule_desafio()
-    #     hits = 0
-    #     while schedule is None:
-    #         logger.warning("No se pudo obtener la hora de lanzamiento del desafío.")
-    #         sleep_progress(60 * 10)  # Espera 10 minutos
-    #         schedule = self.get_schedule_desafio()
-    #         hits += 1
-    #         if hits > 5:
-    #             raise ScheduleNotFound(
-    #                 "No se pudo obtener la hora de lanzamiento del desafío."
-    #             )
-
-    #     release_time = schedule["endtime"] + timedelta(minutes=5)
-    #     return release_time
-
-    # def should_wait_release(self):
-    #     """Determina si se debe esperar la hora de lanzamiento del capítulo."""
-    #     release_time = self.get_release_time()
-    #     today = datetime.now()
-    #     if today < release_time:
-    #         return True
-    #     return False
-
-    # def wait_release(self):
-    #     """Espera hasta la hora de lanzamiento del capítulo segun la programacion de caracoltv."""
-    #     release_time = self.get_release_time()
-    #     logger.info(
-    #         f"Hora de publicacion del capitulo en youtube: {release_time.strftime('%I:%M %p')}"
-    #     )
-    #     today = datetime.now()
-    #     difference = release_time - today
-    #     sleep_progress(difference.total_seconds())
-    #     return False

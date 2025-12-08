@@ -7,10 +7,10 @@ from typing import List, Optional
 from pyparsing import cast
 from pyrogram.types import Message  # type: ignore
 
-from proyect_x.config import MigrationConfig
-from proyect_x.services.register import RegistryManager, VideoMeta
-from proyect_x.services.telegram.client import TelegramService
-from proyect_x.utils import sleep_progress
+from tvpipe.config import MigrationConfig
+from tvpipe.services.register import RegistryManager, VideoMeta
+from tvpipe.services.telegram.client import TelegramService
+from tvpipe.utils import sleep_progress
 
 logger = logging.getLogger(__name__)
 

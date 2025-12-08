@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 sys.path.append(os.getcwd())
 # Importamos tus clases
-from proyect_x.services.caracoltv_schedule import CaracolTVSchedule
-from proyect_x.services.program_monitor import ProgramMonitor
+from tvpipe.services.caracoltv_schedule import CaracolTVSchedule
+from tvpipe.services.program_monitor import ProgramMonitor
 
 MOCK_HTML_CONTENT = """
 <html>
@@ -44,10 +44,10 @@ class TestCaracolSchedule(unittest.TestCase):
     def setUp(self):
         self.client = CaracolTVSchedule()
 
-    @patch("proyect_x.services.caracoltv_schedule.requests.get")
-    @patch("proyect_x.services.caracoltv_schedule.get_day_name")
+    @patch("tvpipe.services.caracoltv_schedule.requests.get")
+    @patch("tvpipe.services.caracoltv_schedule.get_day_name")
     # Para evitar fallo en `get_today_schedule` al iterar sobre otro día
-    @patch("proyect_x.services.caracoltv_schedule.DAYS", ("Lunes",))
+    @patch("tvpipe.services.caracoltv_schedule.DAYS", ("Lunes",))
     def test_parsing_logic(self, mock_day_name, mock_get):
         """Prueba que el HTML se parsea correctamente y se extraen los programas."""
 
@@ -110,7 +110,7 @@ class TestProgramMonitor(unittest.TestCase):
         expected_time = end_time + timedelta(minutes=5)
         self.assertEqual(release_time, expected_time)
 
-    @patch("proyect_x.services.program_monitor.datetime")
+    @patch("tvpipe.services.program_monitor.datetime")
     def test_should_wait_true(self, mock_datetime):
         """Debe esperar si AHORA es ANTES del release_time."""
 
@@ -132,7 +132,7 @@ class TestProgramMonitor(unittest.TestCase):
 
         self.assertTrue(should_wait, "Debería indicar que hay que esperar")
 
-    @patch("proyect_x.services.program_monitor.datetime")
+    @patch("tvpipe.services.program_monitor.datetime")
     def test_should_wait_false(self, mock_datetime):
         """NO debe esperar si AHORA es DESPUÉS del release_time."""
 
@@ -151,8 +151,8 @@ class TestProgramMonitor(unittest.TestCase):
         should_wait = self.monitor.should_wait()
         self.assertFalse(should_wait, "No debería esperar, ya salió el capítulo")
 
-    @patch("proyect_x.services.program_monitor.sleep_progress")
-    @patch("proyect_x.services.program_monitor.datetime")
+    @patch("tvpipe.services.program_monitor.sleep_progress")
+    @patch("tvpipe.services.program_monitor.datetime")
     def test_wait_until_release_calls_sleep(self, mock_datetime, mock_sleep):
         """Verifica que se llama a sleep con la diferencia correcta de segundos."""
 

@@ -33,7 +33,7 @@ ditu/
 scripts/
 digest.txt
 .env.test
-!proyect_x/ditu
+!tvpipe/ditu
 !tests/fixtures/*
 test2.py
 .venv-1

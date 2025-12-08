@@ -2,8 +2,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from proyect_x.services.caracoltv_schedule import CaracolTVSchedule
-from proyect_x.utils import sleep_progress
+from tvpipe.services.caracoltv_schedule import CaracolTVSchedule
+from tvpipe.utils import sleep_progress
 
 
 class ProgramMonitor:

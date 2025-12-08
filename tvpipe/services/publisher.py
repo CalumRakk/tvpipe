@@ -3,11 +3,11 @@ import tempfile
 from pathlib import Path
 from typing import List
 
-from proyect_x.config import TelegramConfig
-from proyect_x.services.register import RegistryManager
-from proyect_x.services.telegram.client import TelegramService
-from proyect_x.services.telegram.schemas import UploadedVideo
-from proyect_x.services.watermark import WatermarkService
+from tvpipe.config import TelegramConfig
+from tvpipe.services.register import RegistryManager
+from tvpipe.services.telegram.client import TelegramService
+from tvpipe.services.telegram.schemas import UploadedVideo
+from tvpipe.services.watermark import WatermarkService
 
 logger = logging.getLogger(__name__)
 

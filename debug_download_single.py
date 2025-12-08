@@ -1,11 +1,11 @@
 import logging
 from pathlib import Path
 
-from proyect_x.config import get_config
-from proyect_x.logging_config import setup_logging
-from proyect_x.yt_downloader.client import YtDlpClient
-from proyect_x.yt_downloader.processing import download_thumbnail, merge_video_audio
-from proyect_x.yt_downloader.runner import get_episode_number_from_title
+from tvpipe.config import get_config
+from tvpipe.logging_config import setup_logging
+from tvpipe.yt_downloader.client import YtDlpClient
+from tvpipe.yt_downloader.processing import download_thumbnail, merge_video_audio
+from tvpipe.yt_downloader.runner import get_episode_number_from_title
 
 # --- CONFIGURACIÓN DE LA PRUEBA ---
 TEST_URL = "https://www.youtube.com/watch?v=pfELv3BsuVQ"

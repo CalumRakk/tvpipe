@@ -6,10 +6,10 @@ from typing import Generator, Optional, cast
 
 import yt_dlp
 
-from proyect_x.config import DownloaderConfig
-from proyect_x.services.program_monitor import ProgramMonitor
-from proyect_x.services.register import RegistryManager
-from proyect_x.utils import sleep_progress
+from tvpipe.config import DownloaderConfig
+from tvpipe.services.program_monitor import ProgramMonitor
+from tvpipe.services.register import RegistryManager
+from tvpipe.utils import sleep_progress
 
 from .client import YtDlpClient
 from .models import DownloadedEpisode

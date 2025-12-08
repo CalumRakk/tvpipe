@@ -1,14 +1,14 @@
 from pathlib import Path
 
-from proyect_x.config import get_config
-from proyect_x.logging_config import setup_logging
-from proyect_x.services.caracoltv_schedule import CaracolTVSchedule
-from proyect_x.services.program_monitor import ProgramMonitor
-from proyect_x.services.publisher import EpisodePublisher
-from proyect_x.services.register import RegistryManager
-from proyect_x.services.telegram.client import TelegramService
-from proyect_x.services.watermark import WatermarkService
-from proyect_x.yt_downloader.runner import main_loop
+from tvpipe.config import get_config
+from tvpipe.logging_config import setup_logging
+from tvpipe.services.caracoltv_schedule import CaracolTVSchedule
+from tvpipe.services.program_monitor import ProgramMonitor
+from tvpipe.services.publisher import EpisodePublisher
+from tvpipe.services.register import RegistryManager
+from tvpipe.services.telegram.client import TelegramService
+from tvpipe.services.watermark import WatermarkService
+from tvpipe.yt_downloader.runner import main_loop
 
 if __name__ == "__main__":
     setup_logging(f"logs/{Path(__file__).stem}.log")
