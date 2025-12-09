@@ -4,7 +4,7 @@ from pathlib import Path
 from tvpipe.config import get_config
 from tvpipe.logging_config import setup_logging
 from tvpipe.services.youtube.client import YtDlpClient
-from tvpipe.services.youtube.service import get_episode_number_from_title
+from tvpipe.services.youtube.strategies import CaracolDesafioParser
 from tvpipe.utils import download_thumbnail
 
 # --- CONFIGURACIÓN DE LA PRUEBA ---
@@ -20,11 +20,12 @@ def debug_single_download():
 
     logger.info(f"--- Iniciando prueba de descarga para: {TEST_URL} ---")
     client = YtDlpClient()
+    desafio_strategy = CaracolDesafioParser()
     try:
         # Obtener Metadatos
         logger.info("Obteniendo metadatos...")
         meta = client.get_metadata(TEST_URL)
-        episode_num = get_episode_number_from_title(meta.title)
+        episode_num = desafio_strategy.extract_number(meta.title)
         logger.info(f"Título detectado: {meta.title}")
         logger.info(f"Episodio detectado: {episode_num}")
 

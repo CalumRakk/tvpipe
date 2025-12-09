@@ -1,9 +1,8 @@
 import logging
-import re
 from typing import Optional
 
 from tvpipe.config import DownloaderConfig
-from tvpipe.interfaces import BaseDownloader, DownloadedEpisode
+from tvpipe.interfaces import BaseDownloader, DownloadedEpisode, EpisodeParser
 from tvpipe.services.register import RegistryManager
 from tvpipe.utils import download_thumbnail
 
@@ -12,28 +11,19 @@ from .client import YtDlpClient
 logger = logging.getLogger(__name__)
 
 
-def get_episode_number_from_title(title: str) -> str:
-    match = re.search(r"ap[íi]tulo\s+(\d+)", title, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    raise Exception("No se encontró el número de episodio.")
-
-
-def is_valid_episode_title(title: str) -> bool:
-    try:
-        episode_num = get_episode_number_from_title(title)
-        return bool(episode_num) and "avance" in title
-    except Exception:
-        return False
-
-
-class YouTubeDownloader(BaseDownloader):
+class YouTubeFetcher(BaseDownloader):
     CHANNEL_URL = "https://www.youtube.com/@desafiocaracol/videos"
 
-    def __init__(self, config: DownloaderConfig, registry: RegistryManager):
+    def __init__(
+        self,
+        config: DownloaderConfig,
+        registry: RegistryManager,
+        episode_parser: EpisodeParser,
+    ):
         self.config = config
         self.registry = registry
-        self.client = YtDlpClient()
+        self.client = YtDlpClient()  # TODO: Comprobar si es mejor inyectarlo
+        self.strategy = episode_parser
 
     def find_and_download(
         self, manual_url: Optional[str] = None
@@ -44,19 +34,17 @@ class YouTubeDownloader(BaseDownloader):
         """
         url = manual_url
         if not url:
+            # ¿El título coincide con la estrategia?
             url = self.client.find_video_by_criteria(
-                channel_url=self.CHANNEL_URL, title_validator=is_valid_episode_title
+                channel_url=self.config.channel_url,
+                title_validator=self.strategy.matches_criteria,
             )
 
         if not url:
             return None
 
         meta = self.client.get_metadata(url)
-        try:
-            episode_num = get_episode_number_from_title(meta.title)
-        except Exception:
-            logger.warning(f"Video encontrado pero título inválido: {meta.title}")
-            return None
+        episode_num = self.strategy.extract_number(meta.title)
 
         if self.registry.was_episode_published(episode_num):
             logger.info(f"El capítulo {episode_num} ya fue publicado anteriormente.")

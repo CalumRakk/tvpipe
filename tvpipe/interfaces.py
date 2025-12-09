@@ -26,3 +26,19 @@ class BaseDownloader(ABC):
         Debe retornar un objeto DownloadedEpisode con las rutas locales, o None.
         """
         pass
+
+
+class EpisodeParser(ABC):
+    """
+    Define las reglas para identificar y procesar títulos de episodios.
+    """
+
+    @abstractmethod
+    def matches_criteria(self, title: str) -> bool:
+        """Devuelve True si el video es un episodio válido que debemos descargar."""
+        pass
+
+    @abstractmethod
+    def extract_number(self, title: str) -> str:
+        """Extrae el número del episodio. Asume que matches_criteria ya pasó."""
+        pass

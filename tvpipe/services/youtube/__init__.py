@@ -1,1 +1,1 @@
-from .service import YouTubeDownloader
+from .service import YouTubeFetcher

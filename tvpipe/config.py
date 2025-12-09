@@ -80,6 +80,8 @@ class DownloaderConfig(BaseSettings):
     # Lista de calidades: YT_QUALITIES="best, 360"
     qualities: Union[List[Union[int, str]], str] = ["best", "360"]
 
+    channel_url: str = "https://www.youtube.com/@desafiocaracol/videos"
+
     output_as_mp4: bool = True
     skip_weekends: bool = True
     check_episode_publication: bool = True
