@@ -1,13 +1,10 @@
 import logging
 import re
-import time
-from datetime import datetime
-from typing import Generator
+from typing import Optional
 
 from tvpipe.config import DownloaderConfig
-from tvpipe.services.program_monitor import ProgramMonitor
 from tvpipe.services.register import RegistryManager
-from tvpipe.utils import download_thumbnail, sleep_progress
+from tvpipe.utils import download_thumbnail
 
 from .client import YtDlpClient
 from .models import DownloadedEpisode
@@ -16,40 +13,13 @@ logger = logging.getLogger(__name__)
 
 
 def get_episode_number_from_title(title: str) -> str:
-    """Extrae el número de episodio del titulo"""
     match = re.search(r"ap[íi]tulo\s+(\d+)", title, re.IGNORECASE)
     if match:
         return match.group(1)
     raise Exception("No se encontró el número de episodio.")
 
 
-def should_skip_weekends():
-    """Determina si se debe omitir la descarga del capítulo hoy."""
-    today = datetime.now()
-    if today.weekday() >= 5:
-        logger.info("Hoy es fin de semana. No hay capítulo.")
-        return True
-    return False
-
-
-def time_remaining_in_day():
-    now = datetime.now()
-    end_of_day = datetime(now.year, now.month, now.day, 23, 59, 59, 999999)
-    return end_of_day - now
-
-
-def wait_end_of_day():
-    logger.info("Esperando fin de dia...")
-    time_remaining = time_remaining_in_day()
-    sleep_progress(time_remaining.total_seconds())
-    logger.info("Dia terminado.")
-
-
 def is_valid_episode_title(title: str) -> bool:
-    """
-    Define explícitamente qué constituye un episodio válido.
-    Usa la extracción del número de episodio como validación.
-    """
     try:
         episode_num = get_episode_number_from_title(title)
         return bool(episode_num) and "avance" in title
@@ -57,64 +27,61 @@ def is_valid_episode_title(title: str) -> bool:
         return False
 
 
-def main_loop(
-    config: DownloaderConfig, registry: RegistryManager, monitor: ProgramMonitor
-) -> Generator[DownloadedEpisode, None, None]:
-
-    client = YtDlpClient()
+class EpisodeDownloader:
     CHANNEL_URL = "https://www.youtube.com/@desafiocaracol/videos"
-    logger.info("Iniciando bucle principal de descargas (Refactorizado)")
 
-    try:
-        while True:
-            url = config.url
-            if url is None:
-                if should_skip_weekends():
-                    logger.info("Es fin de semana. Esperando a que finalice el dia.")
-                    wait_end_of_day()
-                    continue
-                elif monitor.should_wait():
-                    # al finalizar la espera del lanzamiento,
-                    # se vuelve a obtener la hora de lanzamiento para casos donde la programación pueda cambiar.
-                    monitor.wait_until_release()
-                    continue
-                url = client.find_video_by_criteria(
-                    channel_url=CHANNEL_URL, title_validator=is_valid_episode_title
-                )
-                if url is None:
-                    sleep_progress(120)
-                    continue
+    def __init__(self, config: DownloaderConfig, registry: RegistryManager):
+        self.config = config
+        self.registry = registry
+        self.client = YtDlpClient()
 
-            meta = client.get_metadata(url)
+    def find_and_download(
+        self, manual_url: Optional[str] = None
+    ) -> Optional[DownloadedEpisode]:
+        """
+        Intenta encontrar y descargar un episodio.
+        Retorna DownloadedEpisode si tuvo éxito, o None si no encontró nada o ya existe.
+        """
+        url = manual_url
+        if not url:
+            url = self.client.find_video_by_criteria(
+                channel_url=self.CHANNEL_URL, title_validator=is_valid_episode_title
+            )
+
+        if not url:
+            return None
+
+        meta = self.client.get_metadata(url)
+        try:
             episode_num = get_episode_number_from_title(meta.title)
-            if registry.was_episode_published(episode_num):
-                logger.info(
-                    "El capítulo de hoy ya fue descargado. Esperando al siguiente."
-                )
-                wait_end_of_day()
-                continue
+        except Exception:
+            logger.warning(f"Video encontrado pero título inválido: {meta.title}")
+            return None
 
-            quality_pref = str(config.qualities[0]) if config.qualities else "1080p"
-            stream = client.select_best_pair(
-                meta, quality_preference=quality_pref, require_mp4=config.output_as_mp4
-            )
-            filename = config.generate_filename(episode_num, stream.height)
-            output_path = config.download_folder / filename
+        if self.registry.was_episode_published(episode_num):
+            logger.info(f"El capítulo {episode_num} ya fue publicado anteriormente.")
+            return None
 
-            client.download_stream(stream, output_path, url)
+        logger.info(f"Iniciando descarga para Episodio {episode_num}...")
 
-            thumb_path = output_path.with_suffix(".jpg")
-            download_thumbnail(meta.thumbnail_url, thumb_path)
+        quality_pref = (
+            str(self.config.qualities[0]) if self.config.qualities else "1080p"
+        )
 
-            # Yield Resultado
-            yield DownloadedEpisode(
-                episode_number=episode_num,
-                video_path=output_path,
-                thumbnail_path=thumb_path,
-            )
+        stream = self.client.select_best_pair(
+            meta, quality_preference=quality_pref, require_mp4=self.config.output_as_mp4
+        )
 
-            logger.info(f"Ciclo terminado para episodio {episode_num}")
+        filename = self.config.generate_filename(episode_num, stream.height)
+        output_path = self.config.download_folder / filename
 
-    except Exception as e:
-        logger.error(f"Error en el ciclo de descarga: {e}", exc_info=True)
-        time.sleep(30)
+        self.client.download_stream(stream, output_path, url)
+
+        thumb_path = output_path.with_suffix(".jpg")
+        download_thumbnail(meta.thumbnail_url, thumb_path)
+
+        return DownloadedEpisode(
+            episode_number=episode_num,
+            video_path=output_path,
+            thumbnail_path=thumb_path,
+        )

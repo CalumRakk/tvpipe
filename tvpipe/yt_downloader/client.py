@@ -54,6 +54,8 @@ class YtDlpClient:
         """
         temp_video = output_path.with_suffix(".temp")
 
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
         if output_path.exists():
             logger.info(f"Archivo ya existe, saltando descarga: {output_path.name}")
             return output_path
