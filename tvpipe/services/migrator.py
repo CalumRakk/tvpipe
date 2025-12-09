@@ -93,26 +93,26 @@ class ContentMigrator:
 
     def restore_message(self, message_id: int):
         """Método para revertir manualmente un mensaje específico."""
-        self.tg.start()
-        entry = self.registry.get_migration_entry(
-            self.config.source_chat_id, message_id
-        )
+        with self.tg:
+            entry = self.registry.get_migration_entry(
+                self.config.source_chat_id, message_id
+            )
 
-        if not entry:
-            logger.error("No se encontró registro de migración para este mensaje.")
-            return
+            if not entry:
+                logger.error("No se encontró registro de migración para este mensaje.")
+                return
 
-        success = self.tg.restore_video_from_backup(
-            source_chat_id=entry["source_chat_id"],
-            source_message_id=entry["source_message_id"],
-            backup_chat_id=entry["backup_chat_id"],
-            backup_message_id=entry["backup_message_id"],
-            expected_unique_id=entry["video_meta"]["file_unique_id"],
-            caption=entry["original_caption"],
-        )
+            success = self.tg.restore_video_from_backup(
+                source_chat_id=entry["source_chat_id"],
+                source_message_id=entry["source_message_id"],
+                backup_chat_id=entry["backup_chat_id"],
+                backup_message_id=entry["backup_message_id"],
+                expected_unique_id=entry["video_meta"]["file_unique_id"],
+                caption=entry["original_caption"],
+            )
 
-        if success:
-            logger.info(f"Mensaje {message_id} restaurado exitosamente.")
+            if success:
+                logger.info(f"Mensaje {message_id} restaurado exitosamente.")
 
     def _process_album_batch(self, trigger_message: Message, batch_id: str) -> bool:
         """

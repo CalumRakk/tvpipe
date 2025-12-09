@@ -47,29 +47,29 @@ class EpisodePublisher:
                     str(thumbnail_path), self.watermark_text, str(watermarked_thumb)
                 )
 
-                self.tg_service.start()
-                uploaded_videos_info = self._prepare_videos_for_album(
-                    videos, watermarked_thumb
-                )
+                with self.tg_service:
+                    uploaded_videos_info = self._prepare_videos_for_album(
+                        videos, watermarked_thumb
+                    )
 
-                if not uploaded_videos_info:
-                    logger.error("No se obtuvieron videos válidos para publicar.")
-                    return False
+                    if not uploaded_videos_info:
+                        logger.error("No se obtuvieron videos válidos para publicar.")
+                        return False
 
-                caption = self.config.caption.format(episode=episode_number)
-                # Agregar info técnica al caption
-                for vid in uploaded_videos_info:
-                    size_mb = vid.size_bytes / (1024 * 1024)
-                    format_name = "HD" if vid.width > 720 else "SD"
-                    caption += f"{format_name}: {size_mb:.2f} MB\n"
+                    caption = self.config.caption.format(episode=episode_number)
+                    # Agregar info técnica al caption
+                    for vid in uploaded_videos_info:
+                        size_mb = vid.size_bytes / (1024 * 1024)
+                        format_name = "HD" if vid.width > 720 else "SD"
+                        caption += f"{format_name}: {size_mb:.2f} MB\n"
 
-                if not isinstance(self.config.chat_ids, list):
-                    raise Exception("El chat_ids debe ser una lista.")
-                target_chats = self.tg_service.send_album(
-                    files=uploaded_videos_info,
-                    caption=caption,
-                    dest_chat_ids=self.config.chat_ids,
-                )
+                    if not isinstance(self.config.chat_ids, list):
+                        raise Exception("El chat_ids debe ser una lista.")
+                    target_chats = self.tg_service.send_album(
+                        files=uploaded_videos_info,
+                        caption=caption,
+                        dest_chat_ids=self.config.chat_ids,
+                    )
 
                 if not target_chats:
                     logger.warning(

@@ -28,6 +28,13 @@ class TelegramService:
         )
         self._me = None
 
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
+
     def start(self):
         """Inicia el cliente y carga la info del usuario."""
         if not self.client.is_connected:
