@@ -3,9 +3,9 @@ from pathlib import Path
 
 from tvpipe.config import get_config
 from tvpipe.logging_config import setup_logging
+from tvpipe.services.youtube.client import YtDlpClient
+from tvpipe.services.youtube.service import get_episode_number_from_title
 from tvpipe.utils import download_thumbnail
-from tvpipe.yt_downloader.client import YtDlpClient
-from tvpipe.yt_downloader.service import get_episode_number_from_title
 
 # --- CONFIGURACIÓN DE LA PRUEBA ---
 TEST_URL = "https://www.youtube.com/watch?v=pfELv3BsuVQ"

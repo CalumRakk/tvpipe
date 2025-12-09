@@ -5,14 +5,14 @@ from pathlib import Path
 
 from tvpipe.config import get_config
 from tvpipe.logging_config import setup_logging
-from tvpipe.services.caracoltv_schedule import CaracolTVSchedule
+from tvpipe.services.caracoltv import CaracolTVSchedule
 from tvpipe.services.program_monitor import ProgramMonitor
 from tvpipe.services.publisher import EpisodePublisher
 from tvpipe.services.register import RegistryManager
-from tvpipe.services.telegram.client import TelegramService
+from tvpipe.services.telegram import TelegramService
 from tvpipe.services.watermark import WatermarkService
+from tvpipe.services.youtube import YouTubeDownloader
 from tvpipe.utils import sleep_progress
-from tvpipe.yt_downloader.service import YouTubeDownloader
 
 logger = logging.getLogger("Orchestrator")
 

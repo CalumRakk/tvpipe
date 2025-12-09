@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from tvpipe.yt_downloader.models import DownloadedEpisode
+from tvpipe.services.youtube.models import DownloadedEpisode
 
 
 class BaseDownloader(ABC):

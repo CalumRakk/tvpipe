@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from tvpipe.services.caracoltv_schedule import CaracolTVSchedule
+from tvpipe.services.caracoltv import CaracolTVSchedule
 from tvpipe.utils import sleep_progress
 
 
