@@ -1,8 +1,7 @@
 import logging
 import shutil
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional, cast
+from typing import Any, cast
 
 import yt_dlp
 
@@ -46,12 +45,16 @@ class YtDlpClient:
             streams=streams,
             timestamp=info["timestamp"],
             was_live=info["is_live"],
+            url=url,
         )
 
     def download_stream(self, stream: StreamPair, output_path: Path, url: str) -> Path:
         """
         Descarga un stream específico usando la URL original del video.
         """
+        if not url.startswith("https://www.youtube.com/watch?"):
+            raise ValueError(f"URL inválida: {url}")
+
         temp_video = output_path.with_suffix(".temp")
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -74,54 +77,6 @@ class YtDlpClient:
 
         temp_video.rename(output_path)
         return output_path
-
-    def find_video_by_criteria(
-        self, channel_url: str, title_validator: Callable[[str], bool]
-    ) -> Optional[str]:
-        """
-        Busca en el canal un video que cumpla con el validador de título
-        y que haya sido publicado HOY.
-        """
-        logger.info(f"Escaneando canal: {channel_url}")
-
-        search_opts = self.base_opts.copy()
-        search_opts.update(
-            {
-                "extract_flat": True,
-                "playlistend": 5,
-            }
-        )
-
-        with yt_dlp.YoutubeDL(search_opts) as ydl:
-            # download=False y extract_flat=True hacen que esto sea muy rápido
-            info = cast(dict, ydl.extract_info(channel_url, download=False))
-
-            if not info or "entries" not in info:
-                return None
-
-            for entry in info["entries"]:
-                title = entry.get("title", "")
-                url = entry.get("url", "")
-
-                if not title_validator(title):
-                    continue
-
-                # Validación de seguridad (Fecha y Live)
-                try:
-                    meta = self.get_metadata(url)
-
-                    video_date = datetime.fromtimestamp(meta.timestamp).date()
-                    is_today = video_date == datetime.now().date()
-
-                    if is_today and not meta.was_live:
-                        logger.info(f"¡Match confirmado!: {title}")
-                        return url
-
-                except Exception as e:
-                    logger.warning(f"Error verificando metadatos de {url}: {e}")
-                    continue
-
-            return None
 
     def select_best_pair(
         self,
@@ -230,3 +185,16 @@ class YtDlpClient:
 
         # Si es mayor o igual, priorizamos el que esté más cerca
         return -abs(diff)
+
+    def get_latest_channel_entries(
+        self, channel_url: str, limit: int = 5
+    ) -> list[dict]:
+        """Obtiene las últimas N entradas de un canal."""
+        logger.info(f"Escaneando canal: {channel_url}")
+
+        opts = self.base_opts.copy()
+        opts.update({"extract_flat": True, "playlistend": limit})
+
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = cast(dict, ydl.extract_info(channel_url, download=False))
+            return info.get("entries", []) if info else []

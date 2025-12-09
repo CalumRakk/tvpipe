@@ -60,3 +60,4 @@ class VideoMetadata(BaseModel):
     streams: List[Stream] = Field(default_factory=list)
     timestamp: int
     was_live: bool
+    url: str

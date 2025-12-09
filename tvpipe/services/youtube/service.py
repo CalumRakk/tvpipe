@@ -1,9 +1,11 @@
 import logging
+from datetime import datetime
 from typing import Optional
 
 from tvpipe.config import DownloaderConfig
 from tvpipe.interfaces import BaseDownloader, DownloadedEpisode, EpisodeParser
 from tvpipe.services.register import RegistryManager
+from tvpipe.services.youtube.models import VideoMetadata
 from tvpipe.utils import download_thumbnail
 
 from .client import YtDlpClient
@@ -28,28 +30,66 @@ class YouTubeFetcher(BaseDownloader):
     def fetch_and_download(
         self, manual_url: Optional[str] = None
     ) -> Optional[DownloadedEpisode]:
-        """
-        Intenta encontrar y descargar un episodio.
-        Retorna DownloadedEpisode si tuvo éxito, o None si no encontró nada o ya existe.
-        """
-        url = manual_url
-        if not url:
-            # ¿El título coincide con la estrategia?
-            url = self.client.find_video_by_criteria(
-                channel_url=self.config.channel_url,
-                title_validator=self.strategy.matches_criteria,
-            )
+        meta = self._get_target_metadata(manual_url)
 
-        if not url:
+        if not meta:
             return None
 
-        meta = self.client.get_metadata(url)
         episode_num = self.strategy.extract_number(meta.title)
 
         if self.registry.was_episode_published(episode_num):
             logger.info(f"El capítulo {episode_num} ya fue publicado anteriormente.")
             return None
 
+        return self._perform_download(meta, episode_num)
+
+    def _get_target_metadata(
+        self, manual_url: Optional[str]
+    ) -> Optional[VideoMetadata]:
+        """
+        Determina qué video procesar. Si hay URL manual, usa esa.
+        Si no, busca en el canal candidatos válidos.
+        """
+        if manual_url:
+            logger.info("Modo Manual: Obteniendo metadatos de URL provista.")
+            return self.client.get_metadata(manual_url)
+
+        return self._find_automatic_candidate()
+
+    def _find_automatic_candidate(self) -> Optional[VideoMetadata]:
+        """
+        Itera sobre las últimas entradas del canal y retorna los metadatos
+        del primer video que cumpla con la estrategia y sea de hoy.
+        """
+        entries = self.client.get_latest_channel_entries(self.config.channel_url)
+
+        for entry in entries:
+            title = entry.get("title", "")
+            url = entry.get("url", "")
+
+            if not self.strategy.matches_criteria(title):
+                continue
+
+            try:
+                # Validación extra (Fecha y Live status)
+                meta = self.client.get_metadata(url)
+
+                video_date = datetime.fromtimestamp(meta.timestamp).date()
+                is_today = video_date == datetime.now().date()
+
+                if is_today and not meta.was_live:
+                    logger.info(f"¡Candidato encontrado!: {title}")
+                    return meta
+
+            except Exception as e:
+                logger.warning(f"Error verificando candidato {url}: {e}")
+                continue
+
+        return None
+
+    def _perform_download(
+        self, meta: VideoMetadata, episode_num: str
+    ) -> DownloadedEpisode:
         logger.info(f"Iniciando descarga para Episodio {episode_num}...")
 
         quality_pref = (
@@ -62,10 +102,9 @@ class YouTubeFetcher(BaseDownloader):
 
         filename = self.config.generate_filename(episode_num, stream.height)
         output_path = self.config.download_folder / filename
-
-        self.client.download_stream(stream, output_path, url)
-
         thumb_path = output_path.with_suffix(".jpg")
+
+        self.client.download_stream(stream, output_path, meta.url)
         download_thumbnail(meta.thumbnail_url, thumb_path)
 
         return DownloadedEpisode(
