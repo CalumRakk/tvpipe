@@ -69,13 +69,12 @@ def run_orchestrator():
             if config.youtube.url:
                 logger.info("Modo Manual detectado. Saltando chequeos de horario.")
                 episode = downloader.find_and_download(manual_url=config.youtube.url)
-                if episode:
-                    publisher.process_episode(episode)
-                    logger.info("Proceso manual terminado. Saliendo.")
-                    break
-                else:
+                if not episode:
                     logger.error("Falló la descarga manual.")
-                    break
+
+                publisher.process_episode(episode)
+                logger.info("Proceso manual terminado. Saliendo.")
+                break
 
             # Comprobación de fin de semana
             if config.youtube.skip_weekends and should_skip_weekends():
