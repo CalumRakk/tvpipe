@@ -3,12 +3,11 @@ import re
 from typing import Optional
 
 from tvpipe.config import DownloaderConfig
-from tvpipe.interfaces import BaseDownloader
+from tvpipe.interfaces import BaseDownloader, DownloadedEpisode
 from tvpipe.services.register import RegistryManager
 from tvpipe.utils import download_thumbnail
 
 from .client import YtDlpClient
-from .models import DownloadedEpisode
 
 logger = logging.getLogger(__name__)
 
@@ -85,4 +84,5 @@ class YouTubeDownloader(BaseDownloader):
             episode_number=episode_num,
             video_path=output_path,
             thumbnail_path=thumb_path,
+            source="youtube",
         )

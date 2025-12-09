@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import List, Optional, cast
 
 from pydantic import BaseModel, Field, computed_field
@@ -61,9 +60,3 @@ class VideoMetadata(BaseModel):
     streams: List[Stream] = Field(default_factory=list)
     timestamp: int
     was_live: bool
-
-
-class DownloadedEpisode(BaseModel):
-    episode_number: str
-    video_path: Path
-    thumbnail_path: Path

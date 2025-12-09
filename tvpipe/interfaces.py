@@ -1,7 +1,15 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from pathlib import Path
+from typing import Literal, Optional
 
-from tvpipe.services.youtube.models import DownloadedEpisode
+from pydantic import BaseModel
+
+
+class DownloadedEpisode(BaseModel):
+    episode_number: str
+    video_path: Path
+    thumbnail_path: Path
+    source: Literal["youtube"]
 
 
 class BaseDownloader(ABC):
