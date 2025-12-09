@@ -14,17 +14,16 @@ logger = logging.getLogger(__name__)
 
 
 class YouTubeFetcher(BaseDownloader):
-    CHANNEL_URL = "https://www.youtube.com/@desafiocaracol/videos"
-
     def __init__(
         self,
         config: DownloaderConfig,
         registry: RegistryManager,
         episode_parser: EpisodeParser,
+        client: YtDlpClient,
     ):
         self.config = config
         self.registry = registry
-        self.client = YtDlpClient()  # TODO: Comprobar si es mejor inyectarlo
+        self.client = client
         self.strategy = episode_parser
 
     def fetch_and_download(

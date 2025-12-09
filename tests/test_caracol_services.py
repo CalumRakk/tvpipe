@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 sys.path.append(os.getcwd())
-from tvpipe.services.caracoltv_schedule import CaracolTVSchedule
+from tvpipe.services.caracoltv.schedule import CaracolTVSchedule
 from tvpipe.services.program_monitor import ProgramMonitor
 
 MOCK_HTML_CONTENT = """
@@ -14,21 +14,21 @@ MOCK_HTML_CONTENT = """
     <div class="ScheduleWeek-days">
         <div data-day="Lunes">
             <!-- Programa 1: Normal (Desafío) -->
-            <div class="ScheduleDay-Content-item flex flex-col" 
-                 data-starttime="1700000000000" 
+            <div class="ScheduleDay-Content-item flex flex-col"
+                 data-starttime="1700000000000"
                  data-endtime="1700003600000">
-                 <a class="ScheduleDay-media-link" 
-                    title="Desafío XX" 
+                 <a class="ScheduleDay-media-link"
+                    title="Desafío XX"
                     href="https://www.caracoltv.com/desafio"></a>
             </div>
-            
+
             <!-- Programa 2: El último del día con el bug de timestamp (ej: dice terminar a las 12:00 PM/mediodía) -->
             <!-- Supongamos que start es tarde en la noche -->
-            <div class="ScheduleDay-Content-item flex flex-col" 
-                 data-starttime="1700010000000" 
+            <div class="ScheduleDay-Content-item flex flex-col"
+                 data-starttime="1700010000000"
                  data-endtime="1700050000000"> <!-- Timestamp falso para simular el error -->
-                 <a class="ScheduleDay-media-link" 
-                    title="Ultimo Noticiero" 
+                 <a class="ScheduleDay-media-link"
+                    title="Ultimo Noticiero"
                     href="/noticias"></a>
             </div>
         </div>
@@ -43,10 +43,10 @@ class TestCaracolSchedule(unittest.TestCase):
     def setUp(self):
         self.client = CaracolTVSchedule()
 
-    @patch("tvpipe.services.caracoltv_schedule.requests.get")
-    @patch("tvpipe.services.caracoltv_schedule.get_day_name")
+    @patch("tvpipe.services.caracoltv.schedule.requests.get")
+    @patch("tvpipe.services.caracoltv.schedule.get_day_name")
     # Para evitar fallo en `get_today_schedule` al iterar sobre otro día
-    @patch("tvpipe.services.caracoltv_schedule.DAYS", ("Lunes",))
+    @patch("tvpipe.services.caracoltv.schedule.DAYS", ("Lunes",))
     def test_parsing_logic(self, mock_day_name, mock_get):
         """Prueba que el HTML se parsea correctamente y se extraen los programas."""
 

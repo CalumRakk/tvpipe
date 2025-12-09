@@ -11,6 +11,7 @@ from tvpipe.services.publisher import EpisodePublisher
 from tvpipe.services.register import RegistryManager
 from tvpipe.services.telegram import TelegramService
 from tvpipe.services.watermark import WatermarkService
+from tvpipe.services.youtube.client import YtDlpClient
 from tvpipe.services.youtube.service import YouTubeFetcher
 from tvpipe.services.youtube.strategies import CaracolDesafioParser
 from tvpipe.utils import sleep_progress
@@ -58,8 +59,11 @@ def run_orchestrator():
         telegram_service=tg_service,
         watermark_service=watermark_service,
     )
+    yt_client = YtDlpClient()
     desafio_strategy = CaracolDesafioParser()
-    downloader = YouTubeFetcher(config.youtube, register, desafio_strategy)
+    downloader = YouTubeFetcher(
+        config.youtube, register, desafio_strategy, client=yt_client
+    )
 
     logger.info(">>> SISTEMA INICIADO: Orquestador en control <<<")
 
