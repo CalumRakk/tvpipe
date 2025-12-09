@@ -3,8 +3,8 @@ from pathlib import Path
 
 from tvpipe.config import get_config
 from tvpipe.logging_config import setup_logging
+from tvpipe.utils import download_thumbnail
 from tvpipe.yt_downloader.client import YtDlpClient
-from tvpipe.yt_downloader.processing import download_thumbnail
 from tvpipe.yt_downloader.runner import get_episode_number_from_title
 
 # --- CONFIGURACIÓN DE LA PRUEBA ---

@@ -15,6 +15,7 @@ class Stream(BaseModel):
     height: Optional[int] = None
     width: Optional[int] = None
     fps: Optional[float] = None
+    abr: Optional[float] = None
 
     filesize: Optional[int] = None
     filesize_approx: Optional[int] = None

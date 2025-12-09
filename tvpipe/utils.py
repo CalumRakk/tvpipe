@@ -3,9 +3,10 @@ import logging
 import re
 from pathlib import Path
 from time import sleep
-from typing import Union
+from typing import Optional, Union
 
 import filetype
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -56,3 +57,23 @@ def get_mimetype(path: Path):
             sleep(1)
             continue
         return kind.mime
+
+
+def download_thumbnail(url: Optional[str], output_path: Path) -> Path:
+    if not url:
+        logger.warning("No hay URL de miniatura disponible.")
+        return output_path
+
+    if output_path.exists():
+        return output_path
+
+    try:
+        logger.info("Descargando miniatura...")
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        with open(output_path, "wb") as f:
+            f.write(resp.content)
+    except Exception as e:
+        logger.error(f"Error descargando miniatura: {e}")
+
+    return output_path

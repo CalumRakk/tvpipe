@@ -48,58 +48,6 @@ class YtDlpClient:
             was_live=info["is_live"],
         )
 
-    def select_best_pair(
-        self,
-        meta: VideoMetadata,
-        quality_preference: str = "1080p",
-        require_mp4: bool = True,
-    ) -> StreamPair:
-        """
-        Selecciona el mejor par Video + Audio basado en la calidad deseada.
-        """
-        target_h = (
-            int(quality_preference.replace("p", ""))
-            if "p" in quality_preference
-            else 1080
-        )
-
-        # Filtrar videos candidatos
-        candidates = [s for s in meta.streams if s.is_video]
-
-        if require_mp4:
-            candidates = [s for s in candidates if s.is_h264]
-
-            if not candidates:
-                raise ValueError(
-                    f"No se encontraron streams de video compatibles (MP4={require_mp4})"
-                )
-
-        # Ordenar: Primero por cercanía a la altura, luego por bitrate/tamaño
-        #    La key ordena por diferencia absoluta de altura (menor es mejor) y luego tamaño (mayor es mejor)
-        best_video = sorted(
-            candidates, key=lambda s: (abs(s.height - target_h), -s.size_bytes)  # type: ignore
-        )[0]
-
-        logger.info(
-            f"Video seleccionado: {best_video.height}p ({best_video.format_id})"
-        )
-
-        # 4. Seleccionar mejor audio compatible
-        audio_candidates = [s for s in meta.streams if s.is_audio_only]
-        if require_mp4:
-            audio_candidates = [s for s in audio_candidates if s.is_aac]
-
-        if not audio_candidates:
-            # Fallback: si no hay audio aac específico, intentar cualquiera
-            audio_candidates = [s for s in meta.streams if s.is_audio_only]
-
-        best_audio = sorted(audio_candidates, key=lambda s: s.size_bytes, reverse=True)[  # type: ignore
-            0
-        ]
-        logger.info(f"Audio seleccionado: {best_audio.acodec} ({best_audio.format_id})")
-
-        return StreamPair(video=best_video, audio=best_audio)
-
     def download_stream(self, stream: StreamPair, output_path: Path, url: str) -> Path:
         """
         Descarga un stream específico usando la URL original del video.
@@ -172,3 +120,111 @@ class YtDlpClient:
                     continue
 
             return None
+
+    def select_best_pair(
+        self,
+        meta: VideoMetadata,
+        quality_preference: str = "1080p",
+        require_mp4: bool = True,
+    ) -> StreamPair:
+        target_height = self._parse_height(quality_preference)
+
+        # Seleccionar Video
+        best_video = self._select_video_track(meta.streams, target_height, require_mp4)
+        logger.info(
+            f"Video seleccionado: {best_video.height}p ({best_video.format_id})"
+        )
+
+        # Seleccionar Audio (basado en el video elegido)
+        best_audio = self._select_smart_audio_track(
+            meta.streams, best_video.height or 0, require_mp4
+        )
+        logger.info(
+            f"Audio seleccionado: {best_audio.acodec} | Bitrate: {best_audio.abr}k ({best_audio.format_id})"
+        )
+
+        return StreamPair(video=best_video, audio=best_audio)
+
+    def _parse_height(self, quality_str: str) -> int:
+        """Convierte '1080p' o 'best' a un entero numérico."""
+        # TODO: Mejorar el parse para que acepte terminos humanos como "hd","sd" o calidades k como "2k", "4k"
+        if "p" in quality_str:
+            return int(quality_str.replace("p", ""))
+        return 1080
+
+    def _select_video_track(
+        self, streams: list[Stream], target_height: int, require_mp4: bool
+    ) -> Stream:
+        """
+        Filtra y selecciona el stream de video más cercano a la altura deseada.
+        Prioriza H.264 si require_mp4 es True.
+        """
+        candidates = [s for s in streams if s.is_video]
+
+        if require_mp4:
+            # Filtro solo H.264 garantiza merge sin recodificación
+            candidates = [s for s in candidates if s.is_h264]
+            if not candidates:
+                raise ValueError(
+                    "No se encontraron streams de video H.264 compatibles."
+                )
+
+        best_video = min(
+            candidates,
+            key=lambda s: (abs((s.height or 0) - target_height), -s.size_bytes),  # type: ignore
+        )
+        return best_video
+
+    def _select_smart_audio_track(
+        self, streams: list[Stream], video_height: int, require_mp4: bool
+    ) -> Stream:
+        """
+        Selecciona el audio más adecuado proporcionalmente a la calidad del video.
+        """
+        candidates = [s for s in streams if s.is_audio_only]
+
+        if require_mp4:
+            # Preferencia fuerte por AAC para evitar recodificación
+            candidates = [s for s in candidates if s.is_aac]
+            if not candidates:
+                logger.warning(
+                    "No hay audio AAC disponible. Se usará fallback (posible recodificación)."
+                )
+                raise ValueError("No se encontraron streams de audio AAC compatibles.")
+
+        # Definir Bitrate Objetivo (kbps) según resolución de video
+        target_abr = self._get_target_audio_bitrate(video_height)
+
+        # Elegir el ganador basado en Score
+        return sorted(
+            candidates,
+            key=lambda s: self._calculate_audio_score(s, target_abr),
+            reverse=True,
+        )[0]
+
+    def _get_target_audio_bitrate(self, height: int) -> float:
+        """Define qué calidad de audio 'merece' el video según su tamaño."""
+        if height <= 480:
+            return 96.0  # Calidad baja/media
+        elif height < 1080:
+            return 128.0  # Calidad estándar
+        return 9999.0  # Calidad máxima (HD/4K)
+
+    def _calculate_audio_score(self, stream: Stream, target_abr: float) -> float:
+        """
+        Calcula una puntuación para el stream de audio.
+        Retorna un valor más alto cuanto mejor sea el candidato.
+        """
+        abr = stream.abr or 0
+        if target_abr == 9999.0:
+            return abr
+
+        diff = abr - target_abr
+
+        # Penalización fuerte: Si es menor al target (-10kbps de margen), lo castigamos.
+        # Preferimos pasarnos (desperdiciar un poco) a que se escuche mal.
+        if diff < -10:
+            return diff * 2
+
+        # Si es mayor o igual, priorizamos el que esté más cerca
+        return -abs(diff)

@@ -7,13 +7,10 @@ from typing import Generator
 from tvpipe.config import DownloaderConfig
 from tvpipe.services.program_monitor import ProgramMonitor
 from tvpipe.services.register import RegistryManager
-from tvpipe.utils import sleep_progress
+from tvpipe.utils import download_thumbnail, sleep_progress
 
 from .client import YtDlpClient
 from .models import DownloadedEpisode
-from .processing import download_thumbnail
-
-# from .services.scheduling import get_episode_url
 
 logger = logging.getLogger(__name__)
 
