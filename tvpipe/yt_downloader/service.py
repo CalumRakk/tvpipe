@@ -3,6 +3,7 @@ import re
 from typing import Optional
 
 from tvpipe.config import DownloaderConfig
+from tvpipe.interfaces import BaseDownloader
 from tvpipe.services.register import RegistryManager
 from tvpipe.utils import download_thumbnail
 
@@ -27,7 +28,7 @@ def is_valid_episode_title(title: str) -> bool:
         return False
 
 
-class EpisodeDownloader:
+class YouTubeDownloader(BaseDownloader):
     CHANNEL_URL = "https://www.youtube.com/@desafiocaracol/videos"
 
     def __init__(self, config: DownloaderConfig, registry: RegistryManager):

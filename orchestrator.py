@@ -12,7 +12,7 @@ from tvpipe.services.register import RegistryManager
 from tvpipe.services.telegram.client import TelegramService
 from tvpipe.services.watermark import WatermarkService
 from tvpipe.utils import sleep_progress
-from tvpipe.yt_downloader.runner import EpisodeDownloader
+from tvpipe.yt_downloader.service import YouTubeDownloader
 
 logger = logging.getLogger("Orchestrator")
 
@@ -57,7 +57,7 @@ def run_orchestrator():
         telegram_service=tg_service,
         watermark_service=watermark_service,
     )
-    downloader = EpisodeDownloader(config.youtube, register)
+    downloader = YouTubeDownloader(config.youtube, register)
 
     logger.info(">>> SISTEMA INICIADO: Orquestador en control <<<")
 
