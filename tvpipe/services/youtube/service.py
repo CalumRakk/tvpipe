@@ -25,7 +25,7 @@ class YouTubeFetcher(BaseDownloader):
         self.client = YtDlpClient()  # TODO: Comprobar si es mejor inyectarlo
         self.strategy = episode_parser
 
-    def find_and_download(
+    def fetch_and_download(
         self, manual_url: Optional[str] = None
     ) -> Optional[DownloadedEpisode]:
         """

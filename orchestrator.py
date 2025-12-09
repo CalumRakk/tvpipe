@@ -68,7 +68,7 @@ def run_orchestrator():
             # Si `config.youtube.url` está definido, se trata de un modo manual.
             if config.youtube.url:
                 logger.info("Modo Manual detectado. Saltando chequeos de horario.")
-                episode = downloader.find_and_download(manual_url=config.youtube.url)
+                episode = downloader.fetch_and_download(manual_url=config.youtube.url)
                 if not episode:
                     logger.error("Falló la descarga manual.")
 
@@ -87,7 +87,7 @@ def run_orchestrator():
                 monitor.wait_until_release()
                 continue
 
-            episode = downloader.find_and_download()
+            episode = downloader.fetch_and_download()
             if not episode:
                 logger.info("Video no disponible aún. Reintentando en 2 minutos...")
                 sleep_progress(120)

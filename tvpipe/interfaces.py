@@ -18,7 +18,7 @@ class BaseDownloader(ABC):
     """
 
     @abstractmethod
-    def find_and_download(
+    def fetch_and_download(
         self, manual_url: Optional[str] = None
     ) -> Optional[DownloadedEpisode]:
         """
