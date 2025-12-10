@@ -3,9 +3,9 @@ from datetime import datetime
 from typing import Optional
 
 from tvpipe.config import DownloaderConfig
-from tvpipe.interfaces import BaseDownloader, DownloadedEpisode, EpisodeParser
+from tvpipe.interfaces import BaseDownloader, EpisodeParser
+from tvpipe.schemas import DownloadedEpisode, VideoMetadata
 from tvpipe.services.register import RegistryManager
-from tvpipe.services.youtube.models import VideoMetadata
 from tvpipe.utils import download_thumbnail
 
 from .client import YtDlpClient
@@ -26,33 +26,14 @@ class YouTubeFetcher(BaseDownloader):
         self.client = client
         self.strategy = episode_parser
 
-    def fetch_and_download(
-        self, manual_url: Optional[str] = None
-    ) -> Optional[DownloadedEpisode]:
-        meta = self._get_target_metadata(manual_url)
-
-        if not meta:
-            return None
-
-        episode_num = self.strategy.extract_number(meta.title)
-
-        if self.registry.was_episode_published(episode_num):
-            logger.info(f"El capítulo {episode_num} ya fue publicado anteriormente.")
-            return None
-
-        return self._perform_download(meta, episode_num)
-
-    def _get_target_metadata(
-        self, manual_url: Optional[str]
-    ) -> Optional[VideoMetadata]:
+    def fetch_episode(self) -> Optional[VideoMetadata]:
         """
-        Determina qué video procesar. Si hay URL manual, usa esa.
-        Si no, busca en el canal candidatos válidos.
+        Obtiene los metadatos del candidato ideal (ya sea por URL manual o búsqueda automática).
+        NO descarga nada, solo retorna la info si encuentra algo válido.
         """
-        if manual_url:
+        if self.config.url:
             logger.info("Modo Manual: Obteniendo metadatos de URL provista.")
-            return self.client.get_metadata(manual_url)
-
+            return self.client.get_metadata(self.config.url)
         return self._find_automatic_candidate()
 
     def _find_automatic_candidate(self) -> Optional[VideoMetadata]:
@@ -86,29 +67,76 @@ class YouTubeFetcher(BaseDownloader):
 
         return None
 
-    def _perform_download(
-        self, meta: VideoMetadata, episode_num: str
-    ) -> DownloadedEpisode:
-        logger.info(f"Iniciando descarga para Episodio {episode_num}...")
+    def download_episode(self, meta: VideoMetadata) -> DownloadedEpisode:
+        """
+        Orquesta la descarga de múltiples versiones del video según `config.qualities`.
 
-        quality_pref = (
-            str(self.config.qualities[0]) if self.config.qualities else "1080p"
-        )
+        Lógica de Resolución y Deduplicación:
+            1. Itera sobre las calidades deseadas (ej: ["1080p", "720p", "480p"]).
+            2. `select_best_pair` busca el stream más cercano a la calidad solicitada.
+            3. Si el video original tiene resoluciones limitadas (ej: solo llega a 480p):
+               - Al pedir "1080p", el selector retornará el stream de 480p (el mejor disponible).
+               - Al pedir "720p", retornará nuevamente el mismo stream de 480p.
+               - El set `processed_resolutions` detectará que 480p ya se procesó y evitará
+                 descargar el archivo dos veces.
 
-        stream = self.client.select_best_pair(
-            meta, quality_preference=quality_pref, require_mp4=self.config.output_as_mp4
-        )
+        Returns:
+            DownloadedEpisode: Objeto con la lista de rutas de los videos descargados
+            (uno por cada resolución única encontrada) y la miniatura.
+        """
 
-        filename = self.config.generate_filename(episode_num, stream.height)
-        output_path = self.config.download_folder / filename
-        thumb_path = output_path.with_suffix(".jpg")
+        logger.info(f"Iniciando la descarga del Episodio {meta.title}...")
 
-        self.client.download_stream(stream, output_path, meta.url)
+        downloaded_paths = []
+        processed_resolutions = set()
+
+        episode_num = self.strategy.extract_number(meta.title)
+        for quality_pref in self.config.qualities:
+            quality_pref_str = str(quality_pref)
+            try:
+                stream = self.client.select_best_pair(
+                    meta,
+                    quality_preference=quality_pref_str,
+                    require_mp4=self.config.output_as_mp4,
+                )
+            except ValueError as e:
+                logger.warning(f"Saltando calidad '{quality_pref_str}': {e}")
+                continue
+
+            if stream.height in processed_resolutions:
+                logger.info(
+                    f"Omitiendo '{quality_pref_str}' porque la resolución {stream.height}p ya fue procesada."
+                )
+                continue
+
+            filename = self.config.generate_video_filename(episode_num, stream.height)
+            output_path = self.config.download_folder / filename
+
+            try:
+                logger.info(
+                    f"Descargando versión {stream.height}p (pref: {quality_pref_str})..."
+                )
+                self.client.download_stream(stream, output_path, meta.url)
+
+                downloaded_paths.append(output_path)
+                processed_resolutions.add(stream.height)
+
+            except Exception as e:
+                logger.error(f"Error descargando stream {stream.height}p: {e}")
+
+        if not downloaded_paths:
+            raise Exception(
+                f"No se pudo descargar ninguna calidad válida para el episodio {episode_num}."
+            )
+
+        thumb_filename = self.config.generate_thumb_filename(episode_num)
+        thumb_path = self.config.download_folder / thumb_filename
+
         download_thumbnail(meta.thumbnail_url, thumb_path)
 
         return DownloadedEpisode(
             episode_number=episode_num,
-            video_path=output_path,
+            video_paths=downloaded_paths,
             thumbnail_path=thumb_path,
             source="youtube",
         )

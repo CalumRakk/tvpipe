@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List
 
 from tvpipe.config import TelegramConfig
+from tvpipe.schemas import DownloadedEpisode
 from tvpipe.services.register import RegistryManager
 from tvpipe.services.telegram.client import TelegramService
 from tvpipe.services.telegram.schemas import UploadedVideo
@@ -27,7 +28,7 @@ class EpisodePublisher:
         self.tg_service = telegram_service
         self.watermark_service = watermark_service
 
-    def process_episode(self, episode_dled) -> bool:
+    def process_episode(self, episode_dled: DownloadedEpisode) -> bool:
         """
         Orquesta la marca de agua, el registro y la subida de un episodio.
         Retorna True si el proceso fue exitoso.

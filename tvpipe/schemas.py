@@ -1,4 +1,5 @@
-from typing import List, Optional, cast
+from pathlib import Path
+from typing import List, Literal, Optional, cast
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -50,6 +51,13 @@ class StreamPair(BaseModel):
     @property
     def height(self) -> int:
         return cast(int, self.video.height)
+
+
+class DownloadedEpisode(BaseModel):
+    episode_number: str
+    video_paths: List[Path]
+    thumbnail_path: Path
+    source: Literal["youtube"]
 
 
 class VideoMetadata(BaseModel):

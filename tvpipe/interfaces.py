@@ -1,15 +1,7 @@
 from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
 
-from pydantic import BaseModel
-
-
-class DownloadedEpisode(BaseModel):
-    episode_number: str
-    video_path: Path
-    thumbnail_path: Path
-    source: Literal["youtube"]
+from tvpipe.schemas import VideoMetadata
 
 
 class BaseDownloader(ABC):
@@ -18,12 +10,9 @@ class BaseDownloader(ABC):
     """
 
     @abstractmethod
-    def fetch_and_download(
-        self, manual_url: Optional[str] = None
-    ) -> Optional[DownloadedEpisode]:
+    def fetch_episode(self) -> Optional[VideoMetadata]:
         """
-        Busca y descarga el episodio del día.
-        Debe retornar un objeto DownloadedEpisode con las rutas locales, o None.
+        Obtiene los metadatos del video a descargar.
         """
         pass
 

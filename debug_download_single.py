@@ -1,11 +1,11 @@
-import logging
 from pathlib import Path
 
 from tvpipe.config import get_config
 from tvpipe.logging_config import setup_logging
+from tvpipe.services.register import RegistryManager
 from tvpipe.services.youtube.client import YtDlpClient
+from tvpipe.services.youtube.service import YouTubeFetcher
 from tvpipe.services.youtube.strategies import CaracolDesafioParser
-from tvpipe.utils import download_thumbnail
 
 # --- CONFIGURACIÓN DE LA PRUEBA ---
 TEST_URL = "https://www.youtube.com/watch?v=pfELv3BsuVQ"
@@ -13,44 +13,16 @@ TEST_URL = "https://www.youtube.com/watch?v=pfELv3BsuVQ"
 
 def debug_single_download():
     setup_logging(f"logs/{Path(__file__).stem}.log")
-    logger = logging.getLogger("DebugSingle")
 
     config = get_config("config.env")
-    yt_config = config.youtube
+    config.youtube.url = TEST_URL
 
-    logger.info(f"--- Iniciando prueba de descarga para: {TEST_URL} ---")
-    client = YtDlpClient()
-    desafio_strategy = CaracolDesafioParser()
-    try:
-        # Obtener Metadatos
-        logger.info("Obteniendo metadatos...")
-        meta = client.get_metadata(TEST_URL)
-        episode_num = desafio_strategy.extract_number(meta.title)
-        logger.info(f"Título detectado: {meta.title}")
-        logger.info(f"Episodio detectado: {episode_num}")
-
-        # Selecciona StreamPar
-        quality_pref = str(yt_config.qualities[0]) if yt_config.qualities else "1080p"
-        stream = client.select_best_pair(
-            meta, quality_preference=quality_pref, require_mp4=False
-        )
-
-        # Crear nombre de archivo
-        filename = config.youtube.generate_filename(episode_num, stream.height)
-        output_path = config.youtube.download_folder / filename
-
-        logger.info(f"Descargando Video ({stream.height}p)...")
-        client.download_stream(stream, output_path, TEST_URL)
-
-        thumb_path = output_path.with_suffix(".jpg")
-        download_thumbnail(meta.thumbnail_url, thumb_path)
-
-        logger.info(f"PRUEBA EXITOSA.")
-        logger.info(f"Video guardado en: {output_path}")
-        logger.info(f"Miniatura guardada en: {thumb_path}")
-
-    except Exception as e:
-        logger.error(f"Error durante la prueba: {e}", exc_info=True)
+    downloader = YouTubeFetcher(
+        config.youtube, RegistryManager(), CaracolDesafioParser(), YtDlpClient()
+    )
+    episode = downloader.fetch_episode()
+    if episode:
+        downloader.download_episode(episode)
 
 
 if __name__ == "__main__":

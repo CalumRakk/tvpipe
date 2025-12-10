@@ -72,11 +72,13 @@ def run_orchestrator():
             # Si `config.youtube.url` está definido, se trata de un modo manual.
             if config.youtube.url:
                 logger.info("Modo Manual detectado. Saltando chequeos de horario.")
-                episode = downloader.fetch_and_download(manual_url=config.youtube.url)
+                episode = downloader.fetch_episode()
                 if not episode:
                     logger.error("Falló la descarga manual.")
+                    raise Exception("Falló la descarga manual.")
 
-                publisher.process_episode(episode)
+                episode_dled= downloader.download_episode(episode)
+                publisher.process_episode(episode_dled)
                 logger.info("Proceso manual terminado. Saliendo.")
                 break
 
@@ -91,23 +93,21 @@ def run_orchestrator():
                 monitor.wait_until_release()
                 continue
 
-            episode = downloader.fetch_and_download()
+            episode = downloader.fetch_episode()
             if not episode:
                 logger.info("Video no disponible aún. Reintentando en 2 minutos...")
                 sleep_progress(120)
                 continue
 
-            # Publicación
-            success = publisher.process_episode(episode)
+            episode_dled= downloader.download_episode(episode)
+            success = publisher.process_episode(episode_dled)
 
-            if success:
-                logger.info(
-                    f"Ciclo completado exitosamente para {episode.episode_number}."
-                )
-                wait_end_of_day()
-            else:
+            if not success:
                 logger.error("Hubo un error en la publicación.")
                 time.sleep(60)
+
+            logger.info(f"Ciclo completado exitosamente para {episode_dled.episode_number}")
+            wait_end_of_day()
 
         except KeyboardInterrupt:
             logger.info("Deteniendo orquestador por solicitud del usuario.")

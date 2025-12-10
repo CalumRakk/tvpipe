@@ -34,12 +34,6 @@ YOUTUBE_AUDIO_CODECS = {
 }
 
 
-class EpisodeDownloadResult(BaseModel):
-    episode_number: str
-    video_paths: List[Path]
-    thumbnail_path: Path
-
-
 class DownloadJob(TypedDict):
     quality: Union[int, str]
     combinations: list[tuple[str, str]]

@@ -5,7 +5,7 @@ from typing import Any, cast
 
 import yt_dlp
 
-from .models import Stream, StreamPair, VideoMetadata
+from ...schemas import Stream, StreamPair, VideoMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +55,9 @@ class YtDlpClient:
         if not url.startswith("https://www.youtube.com/watch?"):
             raise ValueError(f"URL inválida: {url}")
 
-        temp_video = output_path.with_suffix(".temp")
+        temp_video = output_path.parent / ".temp" / output_path.name
 
+        temp_video.parent.mkdir(parents=True, exist_ok=True)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         if output_path.exists():
@@ -84,6 +85,7 @@ class YtDlpClient:
         quality_preference: str = "1080p",
         require_mp4: bool = True,
     ) -> StreamPair:
+
         target_height = self._parse_height(quality_preference)
 
         # Seleccionar Video
@@ -105,9 +107,10 @@ class YtDlpClient:
     def _parse_height(self, quality_str: str) -> int:
         """Convierte '1080p' o 'best' a un entero numérico."""
         # TODO: Mejorar el parse para que acepte terminos humanos como "hd","sd" o calidades k como "2k", "4k"
-        if "p" in quality_str:
-            return int(quality_str.replace("p", ""))
-        return 1080
+        try:
+            return int(quality_str.lower().replace("p", ""))
+        except ValueError:
+            raise ValueError(f"Calidad inválida: {quality_str}")
 
     def _select_video_track(
         self, streams: list[Stream], target_height: int, require_mp4: bool

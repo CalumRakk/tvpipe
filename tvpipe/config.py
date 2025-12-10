@@ -110,13 +110,19 @@ class DownloaderConfig(BaseSettings):
             return [x.strip().lower() for x in v.split(",")]
         return v
 
-    def generate_filename(
-        self, episode: str, resolution: int, extension: str = "mp4"
+    def generate_video_filename(
+        self, episode: str, resolution: int, extension: str = "mp4", source="yt"
     ) -> str:
         """Genera el nombre estandarizado para un episodio."""
         # zfill(2) asegura que episodio 5 sea "05"
         ep_str = str(episode).zfill(2)
-        return f"{self.serie_name_slug}.capitulo.{ep_str}.yt.{resolution}p.{extension}"
+        return f"{self.serie_name_slug}.capitulo.{ep_str}.{source}.{resolution}p.{extension}"
+
+    def generate_thumb_filename(
+        self, episode: str, extension: str = "jpg", source="yt"
+    ) -> str:
+        ep_str = str(episode).zfill(2)
+        return f"{self.serie_name_slug}.capitulo.{ep_str}.{source}.{extension}"
 
 
 class ProjectConfig(BaseSettings):
