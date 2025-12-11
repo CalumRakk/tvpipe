@@ -60,9 +60,9 @@ class EpisodePublisher:
                     caption = self.config.caption.format(episode=episode_number)
                     # Agregar info técnica al caption
                     for vid in uploaded_videos_info:
-                        size_mb = vid.size_bytes / (1024 * 1024)
+                        size_mb = int(vid.size_bytes / (1024 * 1024))
                         format_name = "HD" if vid.width > 720 else "SD"
-                        caption += f"{format_name}: {size_mb:.2f} MB\n"
+                        caption += f"{format_name}: {size_mb} MB\n"
 
                     if not isinstance(self.config.chat_ids, list):
                         raise Exception("El chat_ids debe ser una lista.")
