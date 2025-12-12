@@ -1,5 +1,6 @@
 import logging
-import time
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -34,8 +35,22 @@ def wait_end_of_day():
         sleep_progress(diff)
 
 
-def run_orchestrator():
+@contextmanager
+def add_watermark_to_image(
+    iamge_path: Path, watermark_text: str, watermark_service: WatermarkService
+):
+    temp_dir = tempfile.TemporaryDirectory()
+    try:
+        watermarked_thumb = Path(temp_dir.name) / Path("thumbnail_watermarked.jpg")
+        watermark_service.add_watermark_to_image(
+            str(iamge_path), watermark_text, str(watermarked_thumb)
+        )
+        yield watermarked_thumb
+    finally:
+        temp_dir.cleanup()
 
+
+def run_orchestrator():
     setup_logging(f"logs/{Path(__file__).stem}.log")
     config = get_config("config.env")
 
@@ -54,10 +69,8 @@ def run_orchestrator():
     watermark_service = WatermarkService()
 
     publisher = EpisodePublisher(
-        telegram_config=config.telegram,
-        registry=register,
-        telegram_service=tg_service,
-        watermark_service=watermark_service,
+        config=config.telegram,
+        client=tg_service,
     )
     yt_client = YtDlpClient()
     desafio_strategy = CaracolDesafioParser()
@@ -70,28 +83,17 @@ def run_orchestrator():
     while True:
         try:
             # Si `config.youtube.url` está definido, se trata de un modo manual.
-            if config.youtube.url:
-                logger.info("Modo Manual detectado. Saltando chequeos de horario.")
-                episode = downloader.fetch_episode()
-                if not episode:
-                    logger.error("Falló la descarga manual.")
-                    raise Exception("Falló la descarga manual.")
+            if not config.youtube.url:
+                # Comprobación de fin de semana
+                if config.youtube.skip_weekends and should_skip_weekends():
+                    logger.info("Es fin de semana. No hay emisión.")
+                    wait_end_of_day()
+                    continue
 
-                episode_dled= downloader.download_episode(episode)
-                publisher.process_episode(episode_dled)
-                logger.info("Proceso manual terminado. Saliendo.")
-                break
-
-            # Comprobación de fin de semana
-            if config.youtube.skip_weekends and should_skip_weekends():
-                logger.info("Es fin de semana. No hay emisión.")
-                wait_end_of_day()
-                continue
-
-            # Comprobacion de Horario
-            if monitor.should_wait():
-                monitor.wait_until_release()
-                continue
+                # Comprobacion de Horario
+                if monitor.should_wait():
+                    monitor.wait_until_release()
+                    continue
 
             episode = downloader.fetch_episode()
             if not episode:
@@ -99,16 +101,49 @@ def run_orchestrator():
                 sleep_progress(120)
                 continue
 
-            episode_dled= downloader.download_episode(episode)
-            success = publisher.process_episode(episode_dled)
+            episode_dled = downloader.download_episode(episode)
+            episode_number = episode_dled.episode_number
+            watermark_text = "https://t.me/DESAFIO_SIGLO_XXI"
+            register.register_downloads(episode_number, episode_dled.video_paths)
+            thumbnail_path = downloader.download_thumbnail(episode)
 
-            if not success:
-                logger.error("Hubo un error en la publicación.")
-                time.sleep(60)
+            watermarked_thumb = add_watermark_to_image(
+                thumbnail_path, watermark_text, watermark_service
+            ).__enter__()
 
-            logger.info(f"Ciclo completado exitosamente para {episode_dled.episode_number}")
-            wait_end_of_day()
+            uploaded_video_list = []
+            for video_path in episode_dled.video_paths:
+                if register.was_video_uploaded(video_path):
+                    data = register.get_video_uploaded(video_path)
+                    chat_id = data["chat_id"]
+                    message_id = data["message_id"]
+                    if tg_service.exists_video_in_chat(chat_id, message_id):
+                        logger.info("Video reutilizado desde caché.")
+                        uploaded_video = tg_service.fetch_video_uploaded(
+                            chat_id, message_id
+                        )
+                        uploaded_video_list.append(uploaded_video)
+                        continue
+                    else:
+                        logger.info("Entrada de caché inválida. Limpiando registro.")
+                        register.remove_video_entry(video_path)
 
+                uploaded_video = tg_service.upload_video(
+                    video_path=video_path,
+                    thumbnail_path=watermarked_thumb,
+                    target_chat_id=config.telegram.chat_id_temporary,
+                    caption=video_path.name,
+                )
+                uploaded_video_list.append(uploaded_video)
+                chat_id = uploaded_video.chat_id
+                message_id = uploaded_video.message_id
+                register.register_video_uploaded(message_id, chat_id, video_path)
+
+            succes = publisher.publish(episode_number, uploaded_video_list)
+            if succes:
+                register.register_episode_publication(episode_number)
+            else:
+                logger.error("No se pudo publicar el episodio.")
         except KeyboardInterrupt:
             logger.info("Deteniendo orquestador por solicitud del usuario.")
             break

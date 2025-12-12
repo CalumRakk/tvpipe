@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import cv2
@@ -13,12 +14,14 @@ def get_video_metadata(video_path: str) -> dict:
         "size_mb": size_mb
     }
     """
+    logger = logging.getLogger(__name__)
     cap = cv2.VideoCapture(video_path)
 
     if not cap.isOpened():
-        print("Error al abrir el video")
+        logger.error("Error al abrir el video")
         exit()
 
+    logger.info("Obteniendo metadatos del video...")
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
@@ -29,7 +32,8 @@ def get_video_metadata(video_path: str) -> dict:
     size_mb = int(size / (1024 * 1024))
 
     cap.release()
-    return {
+
+    data = {
         "width": width,
         "height": height,
         "duration": duration,
@@ -38,3 +42,5 @@ def get_video_metadata(video_path: str) -> dict:
         "path": video_path,
         "format_name": "HD" if width > 720 else "SD",
     }
+    logger.info(f"Metadatos obtenidos: {data}")
+    return data

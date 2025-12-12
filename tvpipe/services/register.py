@@ -278,3 +278,7 @@ class RegistryManager:
         """Obtiene todas las partes de un álbum específico."""
         data = self._load_migration()
         return [d for d in data if d.get("media_group_id") == media_group_id]
+
+    def register_downloads(self, episode_number: str, videos: List[Path]):
+        for video_path in videos:
+            self.register_episode_downloaded(episode_number, video_path)

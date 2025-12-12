@@ -56,7 +56,7 @@ class StreamPair(BaseModel):
 class DownloadedEpisode(BaseModel):
     episode_number: str
     video_paths: List[Path]
-    thumbnail_path: Path
+    # thumbnail_path: Path
     source: Literal["youtube"]
 
 

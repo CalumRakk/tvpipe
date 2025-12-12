@@ -133,6 +133,7 @@ class TelegramService:
     ) -> UploadedVideo:
         """Sube un video individual a un chat específico."""
         if not self.client.is_connected:
+            logger.info("Iniciando Telegram Client...")
             self.start()
 
         meta = get_video_metadata(str(video_path))
@@ -142,6 +143,7 @@ class TelegramService:
                 logger.info(f"Subiendo {video_path.name}: {current * 100 / total:.1f}%")
 
         try:
+            logger.info(f"Subiendo {video_path.name}")
             msg = cast(
                 Message,
                 self.client.send_video(
@@ -156,7 +158,7 @@ class TelegramService:
                     disable_notification=True,
                 ),
             )
-
+            logger.info(f"Video subido con ID {msg.id}")
             return UploadedVideo(
                 file_id=msg.video.file_id,
                 message_id=msg.id,
@@ -177,11 +179,13 @@ class TelegramService:
         self,
         files: List[UploadedVideo],
         caption: str,
-        dest_chat_ids: List[Union[int, str]],
+        dest_chat_ids: List[Union[int, str]] | str,
     ) -> List[int]:
         """Envía un grupo de videos (álbum) a una lista de chats."""
         if not self.client.is_connected:
             self.start()
+        if isinstance(dest_chat_ids, str):
+            dest_chat_ids = [dest_chat_ids]
 
         # Validar permisos primero
         valid_chats = []
@@ -193,6 +197,7 @@ class TelegramService:
             raise PermissionDeniedError("No hay chats de destino válidos con permisos.")
 
         # Construir Media Group
+        files.sort(key=lambda x: x.size_bytes)
         media_group = []
         for i, vid in enumerate(files):
             # Solo el primer video lleva el caption final
@@ -368,3 +373,28 @@ class TelegramService:
         except Exception as e:
             logger.error(f"Error eliminando mensajes en {chat_id}: {e}")
             return False
+
+    def exists_video_in_chat(self, chat_id: Union[int, str], message_id) -> bool:
+        msg = self.get_message(chat_id, message_id)
+        if msg and msg.video:
+            logger.info(f"Video reutilizado desde caché (ID {msg.id}).")
+            return True
+        return False
+
+    def fetch_video_uploaded(
+        self, chat_id: Union[int, str], message_id: int
+    ) -> Optional[UploadedVideo]:
+        msg = cast(Message, self.get_message(chat_id, message_id))
+
+        return UploadedVideo(
+            file_id=msg.video.file_id,
+            message_id=msg.id,
+            chat_id=msg.chat.id,
+            file_path=Path(""),  # Path no disponible en este contexto
+            file_name=msg.video.file_name,
+            size_bytes=msg.video.file_size or 0,
+            width=msg.video.width,
+            height=msg.video.height,
+            duration=msg.video.duration,
+            caption=msg.caption or "",
+        )

@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from tvpipe.config import DownloaderConfig
@@ -129,14 +130,15 @@ class YouTubeFetcher(BaseDownloader):
                 f"No se pudo descargar ninguna calidad válida para el episodio {episode_num}."
             )
 
-        thumb_filename = self.config.generate_thumb_filename(episode_num)
-        thumb_path = self.config.download_folder / thumb_filename
-
-        download_thumbnail(meta.thumbnail_url, thumb_path)
-
         return DownloadedEpisode(
             episode_number=episode_num,
             video_paths=downloaded_paths,
-            thumbnail_path=thumb_path,
             source="youtube",
         )
+
+    def download_thumbnail(self, meta: VideoMetadata) -> Path:
+        episode_num = self.strategy.extract_number(meta.title)
+        thumb_filename = self.config.generate_thumb_filename(episode_num)
+        thumb_path = self.config.download_folder / thumb_filename
+
+        return download_thumbnail(meta.thumbnail_url, thumb_path)
