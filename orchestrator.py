@@ -105,47 +105,18 @@ def run_orchestrator():
             ) as watermarked_thumb:
                 ready_to_publish_list = []
                 for video_path in ep_dled.video_paths:
-                    if services.register.was_video_uploaded(video_path):
-                        data = services.register.get_video_uploaded(video_path)
-                        chat_id = data["chat_id"]
-                        message_id = data["message_id"]
-                        if services.tg.exists_video_in_chat(chat_id, message_id):
-                            logger.info("Video reutilizado desde caché.")
-                            uploaded_video = services.tg.fetch_video_uploaded(
-                                chat_id, message_id
-                            )
-                            ready_to_publish_list.append(uploaded_video)
-                            continue
-                        else:
-                            logger.info(
-                                "Entrada de caché inválida. Limpiando registro."
-                            )
-                            services.register.remove_video_entry(video_path)
-
-                    uploaded_video = services.tg.upload_video(
-                        video_path=video_path,
-                        thumbnail_path=watermarked_thumb,
-                        target_chat_id=config.telegram.chat_id_temporary,
-                        caption=video_path.name,
+                    uploaded = services.publisher.prepare_video(
+                        video_path=video_path, thumbnail_path=watermarked_thumb
                     )
-                    ready_to_publish_list.append(uploaded_video)
-                    chat_id = uploaded_video.chat_id
-                    message_id = uploaded_video.message_id
-                    services.register.register_video_uploaded(
-                        message_id, chat_id, video_path
-                    )
+                    ready_to_publish_list.append(uploaded)
 
                 succes = services.publisher.publish(
                     ep_dled.episode_number, ready_to_publish_list
                 )
                 if succes:
-                    services.register.register_episode_publication(
-                        ep_dled.episode_number
-                    )
                     logger.info(f"Episodio {ep_dled.episode_number} publicado.")
                     consecutive_errors = 0
                 else:
-                    logger.error("No se pudo publicar el episodio.")
                     raise Exception("Fallo en la publicación del álbum")
 
             if config.youtube.url:

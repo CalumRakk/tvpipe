@@ -125,7 +125,7 @@ class ReliabilityGuard:
             )
 
         logger.error(f"Detalle: {exc_val}", exc_info=True)
-        logger.info(f"⏳ Pausando el sistema por {wait_time} segundos...")
+        logger.info(f"Pausando el sistema por {wait_time} segundos...")
         sleep_progress(wait_time)
 
         # Retornar True indica a Python que el error fue "manejado"

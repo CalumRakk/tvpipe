@@ -35,7 +35,9 @@ class ServiceContainer:
             program_url_keyword="desafio",  # TODO: Esto deberia ir en config
         )
 
-        self.publisher = EpisodePublisher(config=config.telegram, client=self.tg)
+        self.publisher = EpisodePublisher(
+            config=config.telegram, telegram_client=self.tg, registry=self.register
+        )
 
         # 3. Servicios de Descarga
         self.yt_client = YtDlpClient()
