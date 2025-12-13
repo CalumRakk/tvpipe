@@ -383,7 +383,7 @@ class TelegramService:
 
     def fetch_video_uploaded(
         self, chat_id: Union[int, str], message_id: int
-    ) -> Optional[UploadedVideo]:
+    ) -> UploadedVideo:
         msg = cast(Message, self.get_message(chat_id, message_id))
 
         return UploadedVideo(

@@ -4,13 +4,14 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from tvpipe.config import get_config
+from tvpipe.config import AppConfig, get_config
 from tvpipe.logging_config import setup_logging
 from tvpipe.services.caracoltv import CaracolTVSchedule
 from tvpipe.services.program_monitor import ProgramMonitor
 from tvpipe.services.publisher import EpisodePublisher
 from tvpipe.services.register import RegistryManager
 from tvpipe.services.telegram import TelegramService
+from tvpipe.services.telegram.schemas import UploadedVideo
 from tvpipe.services.watermark import WatermarkService
 from tvpipe.services.youtube.client import YtDlpClient
 from tvpipe.services.youtube.service import YouTubeFetcher
@@ -48,6 +49,46 @@ def add_watermark_to_image(
         yield watermarked_thumb
     finally:
         temp_dir.cleanup()
+
+
+def get_or_upload_video(
+    video_path: Path,
+    thumbnail_path: Path,
+    config: AppConfig,
+    register: RegistryManager,
+    tg_service: TelegramService,
+) -> UploadedVideo:
+    """
+    Intenta recuperar el video del caché (registro + validación en TG).
+    Si no existe o no es válido, lo sube y registra el evento.
+    """
+    if register.was_video_uploaded(video_path):
+        data = register.get_video_uploaded(video_path)
+        chat_id = data["chat_id"]
+        message_id = data["message_id"]
+
+        if tg_service.exists_video_in_chat(chat_id, message_id):
+            logger.info(f"Video reutilizado desde caché: {video_path.name}")
+            return tg_service.fetch_video_uploaded(chat_id, message_id)
+        else:
+            logger.warning(
+                f"Entrada de caché inválida para {video_path.name}. Limpiando registro."
+            )
+            register.remove_video_entry(video_path)
+
+    logger.info(f"🚀 Subiendo archivo nuevo: {video_path.name}")
+    uploaded_video = tg_service.upload_video(
+        video_path=video_path,
+        thumbnail_path=thumbnail_path,
+        target_chat_id=config.telegram.chat_id_temporary,
+        caption=video_path.name,
+    )
+
+    register.register_video_uploaded(
+        uploaded_video.message_id, uploaded_video.chat_id, video_path
+    )
+
+    return uploaded_video
 
 
 def run_orchestrator():
@@ -95,55 +136,70 @@ def run_orchestrator():
                     monitor.wait_until_release()
                     continue
 
-            episode = downloader.fetch_episode()
-            if not episode:
-                logger.info("Video no disponible aún. Reintentando en 2 minutos...")
-                sleep_progress(120)
-                continue
-
-            episode_dled = downloader.download_episode(episode)
-            episode_number = episode_dled.episode_number
-            watermark_text = "https://t.me/DESAFIO_SIGLO_XXI"
-            register.register_downloads(episode_number, episode_dled.video_paths)
-            thumbnail_path = downloader.download_thumbnail(episode)
-
-            watermarked_thumb = add_watermark_to_image(
-                thumbnail_path, watermark_text, watermark_service
-            ).__enter__()
-
-            uploaded_video_list = []
-            for video_path in episode_dled.video_paths:
-                if register.was_video_uploaded(video_path):
-                    data = register.get_video_uploaded(video_path)
-                    chat_id = data["chat_id"]
-                    message_id = data["message_id"]
-                    if tg_service.exists_video_in_chat(chat_id, message_id):
-                        logger.info("Video reutilizado desde caché.")
-                        uploaded_video = tg_service.fetch_video_uploaded(
-                            chat_id, message_id
-                        )
-                        uploaded_video_list.append(uploaded_video)
-                        continue
-                    else:
-                        logger.info("Entrada de caché inválida. Limpiando registro.")
-                        register.remove_video_entry(video_path)
-
-                uploaded_video = tg_service.upload_video(
-                    video_path=video_path,
-                    thumbnail_path=watermarked_thumb,
-                    target_chat_id=config.telegram.chat_id_temporary,
-                    caption=video_path.name,
-                )
-                uploaded_video_list.append(uploaded_video)
-                chat_id = uploaded_video.chat_id
-                message_id = uploaded_video.message_id
-                register.register_video_uploaded(message_id, chat_id, video_path)
-
-            succes = publisher.publish(episode_number, uploaded_video_list)
-            if succes:
-                register.register_episode_publication(episode_number)
+                episode_meta = downloader.fetch_episode()
+                if not episode_meta:
+                    logger.info("Video no disponible aún. Reintentando en 2 minutos...")
+                    sleep_progress(120)
+                    continue
             else:
-                logger.error("No se pudo publicar el episodio.")
+                episode_meta = downloader.fetch_episode()
+                if episode_meta is None:
+                    raise Exception("No se pudo descargar el episodio.")
+
+            logger.info(f"Procesando episodio: {episode_meta.title}")
+
+            # Descarga de video
+            ep_dled = downloader.download_episode(episode_meta)
+            register.register_downloads(ep_dled.episode_number, ep_dled.video_paths)
+
+            # Descarga de thumbnail
+            thumbnail_path = downloader.download_thumbnail(episode_meta)
+
+            with add_watermark_to_image(
+                thumbnail_path, "https://t.me/DESAFIO_SIGLO_XXI", watermark_service
+            ) as watermarked_thumb:
+                ready_to_publish_list = []
+                for video_path in ep_dled.video_paths:
+                    if register.was_video_uploaded(video_path):
+                        data = register.get_video_uploaded(video_path)
+                        chat_id = data["chat_id"]
+                        message_id = data["message_id"]
+                        if tg_service.exists_video_in_chat(chat_id, message_id):
+                            logger.info("Video reutilizado desde caché.")
+                            uploaded_video = tg_service.fetch_video_uploaded(
+                                chat_id, message_id
+                            )
+                            ready_to_publish_list.append(uploaded_video)
+                            continue
+                        else:
+                            logger.info(
+                                "Entrada de caché inválida. Limpiando registro."
+                            )
+                            register.remove_video_entry(video_path)
+
+                    uploaded_video = tg_service.upload_video(
+                        video_path=video_path,
+                        thumbnail_path=watermarked_thumb,
+                        target_chat_id=config.telegram.chat_id_temporary,
+                        caption=video_path.name,
+                    )
+                    ready_to_publish_list.append(uploaded_video)
+                    chat_id = uploaded_video.chat_id
+                    message_id = uploaded_video.message_id
+                    register.register_video_uploaded(message_id, chat_id, video_path)
+
+                succes = publisher.publish(
+                    ep_dled.episode_number, ready_to_publish_list
+                )
+                if succes:
+                    register.register_episode_publication(ep_dled.episode_number)
+                    logger.info(f"Episodio {ep_dled.episode_number} publicado.")
+                else:
+                    logger.error("No se pudo publicar el episodio.")
+
+            if config.youtube.url:
+                logger.info("Modo manual finalizado.")
+                break
         except KeyboardInterrupt:
             logger.info("Deteniendo orquestador por solicitud del usuario.")
             break
