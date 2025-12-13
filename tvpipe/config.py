@@ -18,6 +18,7 @@ class MigrationConfig(BaseSettings):
     placeholder_image_path: Path = Path("assets/placeholder.jpg")
 
     batch_size: int = 0
+    obfuscation_caption: str = "<b>Este contenido ya no esta disponible.</b>\n\n"
 
     model_config = SettingsConfigDict(
         env_file="config.env", env_prefix="MIGRATION_", extra="ignore"
@@ -41,6 +42,7 @@ class TelegramConfig(BaseSettings):
 
     chat_id_temporary: Union[int, str] = "me"
     caption: str = "Capítulo {episode} - Desafío Siglo XXI\n\n"
+    watermark_text: str = "LeinScript"
 
     model_config = SettingsConfigDict(
         env_file="config.env",
@@ -89,6 +91,10 @@ class DownloaderConfig(BaseSettings):
     # Configuración de modo y horarios
     url: Union[str, None] = None  # Si se define, es modo manual
     release_hour: time = time(21, 30)
+
+    program_keyword: str = "desafio"
+    forbidden_keyword: str = "avance"
+    max_consecutive_errors: int = 15
 
     model_config = SettingsConfigDict(
         env_file="config.env",

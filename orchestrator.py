@@ -19,7 +19,7 @@ def run_orchestrator():
 
     logger.info(">>> SISTEMA INICIADO: Orquestador en control <<<")
     consecutive_errors = 0
-    while consecutive_errors < 15:
+    while consecutive_errors < config.youtube.max_consecutive_errors:
         with guard:
 
             episode_meta = services.monitor.wait_for_next_episode()
@@ -35,7 +35,7 @@ def run_orchestrator():
             # Descarga de thumbnail
             thumbnail_path = services.downloader.download_thumbnail(episode_meta)
             with services.watermark.temporary_watermarked_image(
-                input_path=thumbnail_path, text="https://t.me/DESAFIO_SIGLO_XXI"
+                input_path=thumbnail_path, text=config.telegram.watermark_text
             ) as watermarked_thumb:
                 ready_to_publish_list = []
                 for video_path in ep_dled.video_paths:

@@ -32,7 +32,7 @@ class ServiceContainer:
 
         self.monitor = ProgramMonitor(
             client=self.schedule,
-            program_url_keyword="desafio",  # TODO: Esto deberia ir en config
+            program_url_keyword=config.youtube.program_keyword,
             fetcher=self.downloader,
             config=config.youtube,
         )

@@ -26,12 +26,7 @@ class ContentMigrator:
         self.registry = registry
         self.tg = telegram_service
 
-        # Texto que aparecerá debajo de la imagen placeholder
-        self.obfuscation_caption = (
-            "<b>Este contenido ya no esta disponible.</b>\n\n"
-            "Únete aquí para verlo: https://t.me/desafiosiglo_xxi"
-            "\n\n<b>By Lein</b>"
-        )
+        self.obfuscation_caption = self.config.obfuscation_caption
 
     def run_migration_batch(self):
         logger.info(
