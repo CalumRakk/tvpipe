@@ -1,7 +1,9 @@
 import logging
+import tempfile
+from contextlib import contextmanager
 from importlib.resources import as_file, files
 from pathlib import Path
-from typing import Union, cast
+from typing import Generator, Union, cast
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -118,3 +120,21 @@ class WatermarkService:
             draw.text((manual_x, manual_y), text, font=font, fill=color)
 
         return txt_layer
+
+    @contextmanager
+    def temporary_watermarked_image(
+        self, input_path: Union[str, Path], text: str
+    ) -> Generator[Path, None, None]:
+        """
+        Genera una imagen con marca de agua en un directorio temporal
+        y la elimina automáticamente al salir del contexto 'with'.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "thumbnail_watermarked.jpg"
+
+            try:
+                self.add_watermark_to_image(input_path, text, temp_path)
+                yield temp_path
+            except Exception as e:
+                logger.error(f"Error generando watermark temporal: {e}")
+                raise e

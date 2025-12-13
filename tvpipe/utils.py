@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import re
+from datetime import datetime
 from pathlib import Path
 from time import sleep
 from types import TracebackType
@@ -130,3 +131,18 @@ class ReliabilityGuard:
         # Retornar True indica a Python que el error fue "manejado"
         # y NO debe romper el programa. El bucle while continuará.
         return True
+
+
+def should_skip_weekends() -> bool:
+    """Helper para lógica de fines de semana."""
+    return datetime.now().weekday() >= 5
+
+
+def wait_end_of_day():
+    """Duerme hasta las 23:59:59."""
+    now = datetime.now()
+    end_of_day = datetime(now.year, now.month, now.day, 23, 59, 59)
+    diff = (end_of_day - now).total_seconds()
+    if diff > 0:
+        logger.info("Esperando hasta el fin del día...")
+        sleep_progress(diff)

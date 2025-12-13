@@ -1,7 +1,4 @@
 import logging
-import tempfile
-from contextlib import contextmanager
-from datetime import datetime
 from pathlib import Path
 
 from tvpipe.config import AppConfig, get_config
@@ -10,40 +7,14 @@ from tvpipe.logging_config import setup_logging
 from tvpipe.services.register import RegistryManager
 from tvpipe.services.telegram import TelegramService
 from tvpipe.services.telegram.schemas import UploadedVideo
-from tvpipe.services.watermark import WatermarkService
-from tvpipe.utils import ReliabilityGuard, sleep_progress
+from tvpipe.utils import (
+    ReliabilityGuard,
+    should_skip_weekends,
+    sleep_progress,
+    wait_end_of_day,
+)
 
 logger = logging.getLogger("Orchestrator")
-
-
-def should_skip_weekends() -> bool:
-    """Helper para lógica de fines de semana."""
-    return datetime.now().weekday() >= 5
-
-
-def wait_end_of_day():
-    """Duerme hasta las 23:59:59."""
-    now = datetime.now()
-    end_of_day = datetime(now.year, now.month, now.day, 23, 59, 59)
-    diff = (end_of_day - now).total_seconds()
-    if diff > 0:
-        logger.info("Esperando hasta el fin del día...")
-        sleep_progress(diff)
-
-
-@contextmanager
-def add_watermark_to_image(
-    iamge_path: Path, watermark_text: str, watermark_service: WatermarkService
-):
-    temp_dir = tempfile.TemporaryDirectory()
-    try:
-        watermarked_thumb = Path(temp_dir.name) / Path("thumbnail_watermarked.jpg")
-        watermark_service.add_watermark_to_image(
-            str(iamge_path), watermark_text, str(watermarked_thumb)
-        )
-        yield watermarked_thumb
-    finally:
-        temp_dir.cleanup()
 
 
 def get_or_upload_video(
@@ -129,9 +100,8 @@ def run_orchestrator():
 
             # Descarga de thumbnail
             thumbnail_path = services.downloader.download_thumbnail(episode_meta)
-
-            with add_watermark_to_image(
-                thumbnail_path, "https://t.me/DESAFIO_SIGLO_XXI", services.watermark
+            with services.watermark.temporary_watermarked_image(
+                input_path=thumbnail_path, text="https://t.me/DESAFIO_SIGLO_XXI"
             ) as watermarked_thumb:
                 ready_to_publish_list = []
                 for video_path in ep_dled.video_paths:
