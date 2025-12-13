@@ -9,9 +9,6 @@ from tvpipe.services.telegram import TelegramService
 from tvpipe.services.telegram.schemas import UploadedVideo
 from tvpipe.utils import (
     ReliabilityGuard,
-    should_skip_weekends,
-    sleep_progress,
-    wait_end_of_day,
 )
 
 logger = logging.getLogger("Orchestrator")
@@ -67,28 +64,8 @@ def run_orchestrator():
     consecutive_errors = 0
     while consecutive_errors < 15:
         with guard:
-            # Si `config.youtube.url` está definido, se trata de un modo manual.
-            if not config.youtube.url:
-                # Comprobación de fin de semana
-                if config.youtube.skip_weekends and should_skip_weekends():
-                    logger.info("Es fin de semana. No hay emisión.")
-                    wait_end_of_day()
-                    continue
 
-                # Comprobacion de Horario
-                if services.monitor.should_wait():
-                    services.monitor.wait_until_release()
-                    continue
-
-                episode_meta = services.downloader.fetch_episode()
-                if not episode_meta:
-                    logger.info("Video no disponible aún. Reintentando en 2 minutos...")
-                    sleep_progress(120)
-                    continue
-            else:
-                episode_meta = services.downloader.fetch_episode()
-                if episode_meta is None:
-                    raise Exception("No se pudo descargar el episodio.")
+            episode_meta = services.monitor.wait_for_next_episode()
 
             logger.info(f"Procesando episodio: {episode_meta.title}")
 

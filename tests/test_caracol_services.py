@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.append(os.getcwd())
 from tvpipe.services.caracoltv.schedule import CaracolTVSchedule
-from tvpipe.services.program_monitor import ProgramMonitor
+from tvpipe.services.monitor import ProgramMonitor
 
 MOCK_HTML_CONTENT = """
 <html>
@@ -72,7 +72,12 @@ class TestCaracolSchedule(unittest.TestCase):
 class TestProgramMonitor(unittest.TestCase):
     def setUp(self):
         self.mock_client = MagicMock(spec=CaracolTVSchedule)
-        self.monitor = ProgramMonitor(self.mock_client, program_url_keyword="desafio")
+        self.monitor = ProgramMonitor(
+            self.mock_client,
+            program_url_keyword="desafio",
+            config=MagicMock(),
+            fetcher=MagicMock(),
+        )
 
     def test_program_not_found(self):
         """Si el programa no está en la parrilla, debe devolver None."""
@@ -109,7 +114,7 @@ class TestProgramMonitor(unittest.TestCase):
         expected_time = end_time + timedelta(minutes=5)
         self.assertEqual(release_time, expected_time)
 
-    @patch("tvpipe.services.program_monitor.datetime")
+    @patch("tvpipe.services.monitor.datetime")
     def test_should_wait_true(self, mock_datetime):
         """Debe esperar si AHORA es ANTES del release_time."""
 
@@ -127,11 +132,11 @@ class TestProgramMonitor(unittest.TestCase):
         ]
         mock_datetime.now.return_value = now_fake
 
-        should_wait = self.monitor.should_wait()
+        should_wait = self.monitor._should_wait_for_schedule()
 
         self.assertTrue(should_wait, "Debería indicar que hay que esperar")
 
-    @patch("tvpipe.services.program_monitor.datetime")
+    @patch("tvpipe.services.monitor.datetime")
     def test_should_wait_false(self, mock_datetime):
         """NO debe esperar si AHORA es DESPUÉS del release_time."""
 
@@ -147,33 +152,8 @@ class TestProgramMonitor(unittest.TestCase):
         ]
         mock_datetime.now.return_value = now_fake
 
-        should_wait = self.monitor.should_wait()
+        should_wait = self.monitor._should_wait_for_schedule()
         self.assertFalse(should_wait, "No debería esperar, ya salió el capítulo")
-
-    @patch("tvpipe.services.program_monitor.sleep_progress")
-    @patch("tvpipe.services.program_monitor.datetime")
-    def test_wait_until_release_calls_sleep(self, mock_datetime, mock_sleep):
-        """Verifica que se llama a sleep con la diferencia correcta de segundos."""
-
-        program_end = datetime(2025, 1, 1, 21, 0, 0)
-        release_time = program_end + timedelta(minutes=5)  # 21:05:00
-
-        # Ahora son las 21:04:00 (Falta 1 minuto = 60 segundos)
-        now_fake = datetime(2025, 1, 1, 21, 4, 0)
-
-        self.mock_client.get_today_schedule.return_value = [
-            {"url": "/desafio", "endtime": program_end}
-        ]
-        mock_datetime.now.return_value = now_fake
-
-        self.monitor.wait_until_release()
-
-        # Verificar que se llamó a sleep_progress
-        # Diferencia: 21:05 - 21:04 = 60 segundos
-        args, _ = mock_sleep.call_args
-        seconds_slept = args[0]
-
-        self.assertAlmostEqual(seconds_slept, 60.0, delta=1.0)
 
 
 if __name__ == "__main__":

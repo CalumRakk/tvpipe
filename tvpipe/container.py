@@ -1,6 +1,6 @@
 from tvpipe.config import AppConfig
 from tvpipe.services.caracoltv import CaracolTVSchedule
-from tvpipe.services.program_monitor import ProgramMonitor
+from tvpipe.services.monitor import ProgramMonitor
 from tvpipe.services.publisher import EpisodePublisher
 from tvpipe.services.register import RegistryManager
 from tvpipe.services.telegram import TelegramService
@@ -33,6 +33,8 @@ class ServiceContainer:
         self.monitor = ProgramMonitor(
             client=self.schedule,
             program_url_keyword="desafio",  # TODO: Esto deberia ir en config
+            fetcher=self.downloader,
+            config=config.youtube,
         )
 
         self.publisher = EpisodePublisher(
