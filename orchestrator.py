@@ -16,7 +16,7 @@ from tvpipe.services.watermark import WatermarkService
 from tvpipe.services.youtube.client import YtDlpClient
 from tvpipe.services.youtube.service import YouTubeFetcher
 from tvpipe.services.youtube.strategies import CaracolDesafioParser
-from tvpipe.utils import sleep_progress
+from tvpipe.utils import ReliabilityGuard, sleep_progress
 
 logger = logging.getLogger("Orchestrator")
 
@@ -94,7 +94,7 @@ def get_or_upload_video(
 def run_orchestrator():
     setup_logging(f"logs/{Path(__file__).stem}.log")
     config = get_config("config.env")
-
+    guard = ReliabilityGuard()
     register = RegistryManager()
 
     # Servicios
@@ -120,9 +120,9 @@ def run_orchestrator():
     )
 
     logger.info(">>> SISTEMA INICIADO: Orquestador en control <<<")
-
-    while True:
-        try:
+    consecutive_errors = 0
+    while consecutive_errors < 15:
+        with guard:
             # Si `config.youtube.url` está definido, se trata de un modo manual.
             if not config.youtube.url:
                 # Comprobación de fin de semana
@@ -194,18 +194,16 @@ def run_orchestrator():
                 if succes:
                     register.register_episode_publication(ep_dled.episode_number)
                     logger.info(f"Episodio {ep_dled.episode_number} publicado.")
+                    consecutive_errors = 0
                 else:
                     logger.error("No se pudo publicar el episodio.")
+                    raise Exception("Fallo en la publicación del álbum")
 
             if config.youtube.url:
                 logger.info("Modo manual finalizado.")
                 break
-        except KeyboardInterrupt:
-            logger.info("Deteniendo orquestador por solicitud del usuario.")
-            break
-        except Exception as e:
-            logger.error(f"Error crítico en el bucle principal: {e}", exc_info=True)
-            sleep_progress(60)
+
+    logger.info("Orchestrator finalizado.")
 
 
 if __name__ == "__main__":

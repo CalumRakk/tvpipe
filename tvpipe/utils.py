@@ -3,10 +3,13 @@ import logging
 import re
 from pathlib import Path
 from time import sleep
-from typing import Optional, Union
+from types import TracebackType
+from typing import Optional, Type, Union
 
 import filetype
 import requests
+
+from tvpipe.exceptions import DownloadError, TelegramConnectionError
 
 logger = logging.getLogger(__name__)
 
@@ -77,3 +80,53 @@ def download_thumbnail(url: Optional[str], output_path: Path) -> Path:
         logger.error(f"Error descargando miniatura: {e}")
 
     return output_path
+
+
+class ReliabilityGuard:
+    """
+    Gestor de contexto que maneja errores, reintentos y backoff exponencial.
+    """
+
+    def __init__(self):
+        self.consecutive_errors = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> bool:
+        # Si exc_type es None, significa que NO hubo error
+        if exc_type is None:
+            if self.consecutive_errors > 0:
+                logger.info("El sistema se ha recuperado tras errores previos.")
+            self.consecutive_errors = 0
+            return False
+
+        # Si hubo error, incrementamos contador
+        self.consecutive_errors += 1
+
+        if issubclass(exc_type, TelegramConnectionError):
+            wait_time = min(300 * self.consecutive_errors, 3600)
+            logger.error(
+                f"Error conexión Telegram (Intento {self.consecutive_errors})."
+            )
+        elif issubclass(exc_type, DownloadError):
+            wait_time = min(60 * self.consecutive_errors, 1800)
+            logger.error(f"Error descarga (Intento {self.consecutive_errors}).")
+        else:
+            wait_time = min(60 * self.consecutive_errors, 1800)
+            logger.error(
+                f"Error crítico/inesperado (Intento {self.consecutive_errors})."
+            )
+
+        logger.error(f"Detalle: {exc_val}", exc_info=True)
+        logger.info(f"⏳ Pausando el sistema por {wait_time} segundos...")
+        sleep_progress(wait_time)
+
+        # Retornar True indica a Python que el error fue "manejado"
+        # y NO debe romper el programa. El bucle while continuará.
+        return True

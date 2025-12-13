@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Generator, List, Optional, Union, cast
 
 from pyrogram import Client, enums  # type: ignore
-from pyrogram.errors import ChatWriteForbidden, PeerIdInvalid  # type: ignore
+from pyrogram.errors import ChatWriteForbidden, PeerIdInvalid, RPCError  # type: ignore
 from pyrogram.types import (  # type: ignore
     Chat,
     ChatMember,
@@ -12,6 +12,12 @@ from pyrogram.types import (  # type: ignore
     Message,
     User,
     Video,
+)
+
+from tvpipe.exceptions import (
+    ContentNotFoundError,
+    TelegramConnectionError,
+    TelegramError,
 )
 
 from .exceptions import AuthenticationError, PermissionDeniedError
@@ -384,17 +390,27 @@ class TelegramService:
     def fetch_video_uploaded(
         self, chat_id: Union[int, str], message_id: int
     ) -> UploadedVideo:
-        msg = cast(Message, self.get_message(chat_id, message_id))
+        try:
+            msg = cast(Message, self.get_message(chat_id, message_id))
+            if not msg or not msg.video:
+                raise ContentNotFoundError(
+                    f"El mensaje {message_id} en chat {chat_id} no existe o no tiene video."
+                )
 
-        return UploadedVideo(
-            file_id=msg.video.file_id,
-            message_id=msg.id,
-            chat_id=msg.chat.id,
-            file_path=Path(""),  # Path no disponible en este contexto
-            file_name=msg.video.file_name,
-            size_bytes=msg.video.file_size or 0,
-            width=msg.video.width,
-            height=msg.video.height,
-            duration=msg.video.duration,
-            caption=msg.caption or "",
-        )
+            return UploadedVideo(
+                file_id=msg.video.file_id,
+                message_id=msg.id,
+                chat_id=msg.chat.id,
+                file_path=Path(""),  # Path no disponible en este contexto
+                file_name=msg.video.file_name,
+                size_bytes=msg.video.file_size or 0,
+                width=msg.video.width,
+                height=msg.video.height,
+                duration=msg.video.duration,
+                caption=msg.caption or "",
+            )
+        except ConnectionError as e:
+            raise TelegramConnectionError(f"Fallo de conexión con Telegram: {e}") from e
+        except RPCError as e:
+            # Error de la API de Telegram (ej: permisos, flood wait)
+            raise TelegramError(f"Error de API Telegram: {e}") from e

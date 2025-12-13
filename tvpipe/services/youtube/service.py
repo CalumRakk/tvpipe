@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from tvpipe.config import DownloaderConfig
+from tvpipe.exceptions import DownloadError
 from tvpipe.interfaces import BaseDownloader, EpisodeParser
 from tvpipe.schemas import DownloadedEpisode, VideoMetadata
 from tvpipe.services.register import RegistryManager
@@ -68,7 +69,9 @@ class YouTubeFetcher(BaseDownloader):
 
         return None
 
-    def download_episode(self, meta: VideoMetadata) -> DownloadedEpisode:
+    def download_episode(
+        self, meta: VideoMetadata, safe: bool = False
+    ) -> DownloadedEpisode:
         """
         Orquesta la descarga de múltiples versiones del video según `config.qualities`.
 
@@ -88,53 +91,66 @@ class YouTubeFetcher(BaseDownloader):
 
         logger.info(f"Iniciando la descarga del Episodio {meta.title}...")
 
-        downloaded_paths = []
-        processed_resolutions = set()
+        try:
+            downloaded_paths = []
+            processed_resolutions = set()
 
-        episode_num = self.strategy.extract_number(meta.title)
-        for quality_pref in self.config.qualities:
-            quality_pref_str = str(quality_pref)
-            try:
-                stream = self.client.select_best_pair(
-                    meta,
-                    quality_preference=quality_pref_str,
-                    require_mp4=self.config.output_as_mp4,
+            episode_num = self.strategy.extract_number(meta.title)
+            for quality_pref in self.config.qualities:
+                quality_pref_str = str(quality_pref)
+                try:
+                    stream = self.client.select_best_pair(
+                        meta,
+                        quality_preference=quality_pref_str,
+                        require_mp4=self.config.output_as_mp4,
+                    )
+                except ValueError as e:
+                    logger.warning(f"Saltando calidad '{quality_pref_str}': {e}")
+                    continue
+
+                if stream.height in processed_resolutions:
+                    logger.info(
+                        f"Omitiendo '{quality_pref_str}' porque la resolución {stream.height}p ya fue procesada."
+                    )
+                    continue
+
+                filename = self.config.generate_video_filename(
+                    episode_num, stream.height
                 )
-            except ValueError as e:
-                logger.warning(f"Saltando calidad '{quality_pref_str}': {e}")
-                continue
+                output_path = self.config.download_folder / filename
 
-            if stream.height in processed_resolutions:
-                logger.info(
-                    f"Omitiendo '{quality_pref_str}' porque la resolución {stream.height}p ya fue procesada."
+                try:
+                    logger.info(
+                        f"Descargando versión {stream.height}p (pref: {quality_pref_str})..."
+                    )
+                    self.client.download_stream(stream, output_path, meta.url)
+
+                    downloaded_paths.append(output_path)
+                    processed_resolutions.add(stream.height)
+
+                except Exception as e:
+                    logger.error(f"Error descargando stream {stream.height}p: {e}")
+                    raise DownloadError(
+                        f"Fallo en yt-dlp para {meta.title}: {e}"
+                    ) from e
+
+            if not downloaded_paths:
+                raise Exception(
+                    f"No se pudo descargar ninguna calidad válida para el episodio {episode_num}."
                 )
-                continue
 
-            filename = self.config.generate_video_filename(episode_num, stream.height)
-            output_path = self.config.download_folder / filename
-
-            try:
-                logger.info(
-                    f"Descargando versión {stream.height}p (pref: {quality_pref_str})..."
-                )
-                self.client.download_stream(stream, output_path, meta.url)
-
-                downloaded_paths.append(output_path)
-                processed_resolutions.add(stream.height)
-
-            except Exception as e:
-                logger.error(f"Error descargando stream {stream.height}p: {e}")
-
-        if not downloaded_paths:
-            raise Exception(
-                f"No se pudo descargar ninguna calidad válida para el episodio {episode_num}."
+            return DownloadedEpisode(
+                episode_number=episode_num,
+                video_paths=downloaded_paths,
+                source="youtube",
             )
 
-        return DownloadedEpisode(
-            episode_number=episode_num,
-            video_paths=downloaded_paths,
-            source="youtube",
-        )
+        except DownloadError as e:
+            if safe:
+                logger.error(f"Error controlado al descargar: {e}")
+                return None  # type: ignore
+            else:
+                raise e
 
     def download_thumbnail(self, meta: VideoMetadata) -> Path:
         episode_num = self.strategy.extract_number(meta.title)
