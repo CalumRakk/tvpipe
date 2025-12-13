@@ -1,57 +1,14 @@
 import logging
 from pathlib import Path
 
-from tvpipe.config import AppConfig, get_config
+from tvpipe.config import get_config
 from tvpipe.container import ServiceContainer
 from tvpipe.logging_config import setup_logging
-from tvpipe.services.register import RegistryManager
-from tvpipe.services.telegram import TelegramService
-from tvpipe.services.telegram.schemas import UploadedVideo
 from tvpipe.utils import (
     ReliabilityGuard,
 )
 
 logger = logging.getLogger("Orchestrator")
-
-
-def get_or_upload_video(
-    video_path: Path,
-    thumbnail_path: Path,
-    config: AppConfig,
-    register: RegistryManager,
-    tg_service: TelegramService,
-) -> UploadedVideo:
-    """
-    Intenta recuperar el video del caché (registro + validación en TG).
-    Si no existe o no es válido, lo sube y registra el evento.
-    """
-    if register.was_video_uploaded(video_path):
-        data = register.get_video_uploaded(video_path)
-        chat_id = data["chat_id"]
-        message_id = data["message_id"]
-
-        if tg_service.exists_video_in_chat(chat_id, message_id):
-            logger.info(f"Video reutilizado desde caché: {video_path.name}")
-            return tg_service.fetch_video_uploaded(chat_id, message_id)
-        else:
-            logger.warning(
-                f"Entrada de caché inválida para {video_path.name}. Limpiando registro."
-            )
-            register.remove_video_entry(video_path)
-
-    logger.info(f"🚀 Subiendo archivo nuevo: {video_path.name}")
-    uploaded_video = tg_service.upload_video(
-        video_path=video_path,
-        thumbnail_path=thumbnail_path,
-        target_chat_id=config.telegram.chat_id_temporary,
-        caption=video_path.name,
-    )
-
-    register.register_video_uploaded(
-        uploaded_video.message_id, uploaded_video.chat_id, video_path
-    )
-
-    return uploaded_video
 
 
 def run_orchestrator():
